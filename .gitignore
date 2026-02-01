@@ -1,0 +1,81 @@
+# Build results
+bin/
+obj/
+out/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet
+*.nupkg
+.nuget/
+packages/
+
+# Rider
+.idea/
+
+# User-specific files
+*.rsuser
+*.user
+*.suo
+*.cache
+*.userosscache
+*_i.c
+*_p.c
+*_h.h
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.pdb
+*.ipdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*_wpftmp.csproj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# Configuration with secrets - USE appsettings.example.json as template
+appsettings.json
+appsettings.*.json
+!appsettings.example.json
+
+# Local MCP configuration
+.mcp.json
+
+# Audit logs
+*.log
+audit.log
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude/AI assistant local settings
+.claude/
+
+# Backup files
+*.bak
+*.backup
