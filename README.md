@@ -30,7 +30,7 @@ cd postgres-mcp-server
 
 ### 2. Configure database connections
 
-Copy the example configuration and add your database credentials:
+Copy the example configuration:
 
 ```bash
 cp appsettings.example.json appsettings.json
@@ -60,25 +60,22 @@ Edit `appsettings.json` with your database connection strings:
 ### 3. Build the project
 
 ```bash
-dotnet build
+dotnet build PostgresMcpServer.csproj
 ```
 
 ## Configuration
 
-### Environment Variables
+### appsettings.json
 
-You can override any configuration using environment variables with the `POSTGRES_MCP_` prefix:
-
-```bash
-# Override a database connection
-export POSTGRES_MCP_Databases__production="Host=prod.example.com;..."
-
-# Disable dry-run mode
-export POSTGRES_MCP_Safety__EnableDryRun=false
-
-# Change audit log path
-export POSTGRES_MCP_Audit__LogPath="/var/log/postgres-mcp/audit.log"
-```
+| Section | Setting | Description |
+|---------|---------|-------------|
+| `Databases` | Key-value pairs | Database name → connection string |
+| `Safety.RequireConfirmation` | `true`/`false` | Require confirmation for critical operations |
+| `Safety.EnableDryRun` | `true`/`false` | Enable dry-run mode for write operations |
+| `Safety.CriticalOperations` | Array | Operations that trigger safety checks |
+| `Audit.Enabled` | `true`/`false` | Enable audit logging |
+| `Audit.LogPath` | String | Path to audit log file |
+| `Audit.LogToConsole` | `true`/`false` | Also log to console |
 
 ### Claude Desktop Integration
 
@@ -88,31 +85,8 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 {
   "mcpServers": {
     "postgres": {
-      "command": "dotnet",
-      "args": ["run", "--project", "/path/to/PostgresMcpServer.csproj"],
-      "env": {
-        "POSTGRES_MCP_Databases__production": "Host=localhost;Port=5432;Database=mydb;Username=postgres;Password=YOUR_PASSWORD",
-        "POSTGRES_MCP_Databases__development": "Host=localhost;Port=5432;Database=devdb;Username=dev_user;Password=YOUR_PASSWORD",
-        "POSTGRES_MCP_Safety__RequireConfirmation": "true",
-        "POSTGRES_MCP_Safety__EnableDryRun": "true",
-        "POSTGRES_MCP_Audit__Enabled": "true"
-      }
-    }
-  }
-}
-```
-
-For compiled executable (recommended - faster startup):
-
-```json
-{
-  "mcpServers": {
-    "postgres": {
       "command": "/path/to/bin/Debug/net10.0/PostgresMcpServer.exe",
-      "cwd": "/path/to/bin/Debug/net10.0",
-      "env": {
-        "POSTGRES_MCP_Databases__mydb": "Host=localhost;Port=5432;Database=mydb;Username=postgres;Password=YOUR_PASSWORD"
-      }
+      "cwd": "/path/to/bin/Debug/net10.0"
     }
   }
 }
@@ -126,11 +100,8 @@ Add to your project's `.mcp.json`:
 {
   "mcpServers": {
     "postgres": {
-      "command": "dotnet",
-      "args": ["run", "--project", "/path/to/PostgresMcpServer.csproj", "--no-build"],
-      "env": {
-        "POSTGRES_MCP_Databases__mydb": "Host=localhost;Port=5432;Database=mydb;Username=postgres;Password=YOUR_PASSWORD"
-      }
+      "command": "/path/to/bin/Debug/net10.0/PostgresMcpServer.exe",
+      "cwd": "/path/to/bin/Debug/net10.0"
     }
   }
 }
@@ -221,7 +192,7 @@ Example audit log entry:
 
 ## Security Best Practices
 
-1. **Never commit credentials** - Use environment variables or secrets management
+1. **Never commit credentials** - The `.gitignore` excludes `appsettings.json`
 2. **Use read-only users** - Create database users with minimal required permissions
 3. **Enable audit logging** - Track all operations for compliance
 4. **Keep dry-run enabled** - Prevent accidental data modifications
@@ -278,7 +249,7 @@ dotnet test
 ### Connection Issues
 
 1. Verify PostgreSQL is running: `pg_isready -h localhost -p 5432`
-2. Check connection string format in configuration
+2. Check connection string format in `appsettings.json`
 3. Ensure firewall allows connections on PostgreSQL port
 
 ### Permission Errors

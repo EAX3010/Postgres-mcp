@@ -5,19 +5,23 @@ using ModelContextProtocol.Server;
 using PostgresMcpServer.Models;
 using PostgresMcpServer.Services;
 
-var builder = Host.CreateApplicationBuilder(args);
-
 // Get the directory where the executable is located
 var exeDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!;
 
-// Load configuration from executable directory
-builder.Configuration
-    .AddJsonFile(Path.Combine(exeDir, "appsettings.json"), optional: true, reloadOnChange: true)
-    .AddJsonFile(Path.Combine(exeDir, $"appsettings.{builder.Environment.EnvironmentName}.json"), optional: true)
-    .AddEnvironmentVariables("POSTGRES_MCP_");
+// Build configuration from appsettings.json
+var configuration = new ConfigurationBuilder()
+    .SetBasePath(exeDir)
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .Build();
+
+var builder = Host.CreateApplicationBuilder(args);
+
+// Clear default configuration and use ours
+builder.Configuration.Sources.Clear();
+builder.Configuration.AddConfiguration(configuration);
 
 // Register configuration
-builder.Services.Configure<DatabaseConfig>(builder.Configuration);
+builder.Services.Configure<DatabaseConfig>(configuration);
 
 // Register services
 builder.Services.AddSingleton<IConnectionManager, ConnectionManager>();
