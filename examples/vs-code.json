@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "postgres": {
+      "type": "stdio",
+      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+    }
+  }
+}

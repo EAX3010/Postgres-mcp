@@ -1,0 +1,205 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, e.g. 1.0.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            archive: zip
+          - rid: linux-x64
+            archive: tar.gz
+          - rid: linux-arm64
+            archive: tar.gz
+          - rid: osx-x64
+            archive: tar.gz
+          - rid: osx-arm64
+            archive: tar.gz
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building $VERSION for ${{ matrix.rid }}"
+
+      # Self-contained so the archive runs without the .NET runtime installed.
+      - name: Publish
+        run: |
+          dotnet publish PostgresMcpServer.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained \
+            -p:Version=${{ steps.version.outputs.version }} \
+            -p:DebugType=none \
+            -o staging/PostgresMcpServer
+
+      - name: Add documentation to the archive
+        run: |
+          cd staging/PostgresMcpServer
+          rm -f appsettings.json          # never ship anyone's real credentials
+          cp -r "$GITHUB_WORKSPACE/docs" docs
+          cp "$GITHUB_WORKSPACE/README.md" README.md
+          cp "$GITHUB_WORKSPACE/CHANGELOG.md" CHANGELOG.md 2>/dev/null || true
+          ls -la
+
+      # Shown to anyone who unpacks the archive without reading the release notes.
+      - name: Write START-HERE.txt
+        run: |
+          EXE="./PostgresMcpServer"
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then EXE="PostgresMcpServer.exe"; fi
+          cat > staging/PostgresMcpServer/START-HERE.txt <<EOF
+          PostgresMcpServer ${{ steps.version.outputs.version }} (${{ matrix.rid }})
+          A Model Context Protocol server for PostgreSQL.
+
+          This build is self-contained. You do NOT need the .NET runtime installed.
+
+          SETUP
+            1. $EXE --init
+                 Creates appsettings.json next to this file.
+
+            2. Edit appsettings.json and replace CHANGE_ME with your password.
+
+            3. $EXE --check
+                 Connects to every configured database and reports what it finds.
+
+            4. Register this executable with your MCP client.
+               Ready-to-copy configuration for each client is in examples/
+               Step-by-step instructions are in docs/clients/
+
+          WHAT IS IN THIS ARCHIVE
+            $EXE                     the server
+            appsettings.example.json    every available setting, documented
+            examples/                   client configs: Claude Desktop, Claude Code,
+                                        Cursor, VS Code, Windsurf, Cline, Gemini CLI, Zed
+            docs/                       full documentation
+            README.md                   overview
+            LICENSE                     MIT
+
+          NOTES
+            Run "$EXE --help" for all commands.
+            Started with no arguments this waits for JSON-RPC on stdin; that is how
+            MCP clients launch it, and it is not useful to run by hand.
+
+          Before pointing this at a production database, read docs/security.md.
+          Connect as a least-privilege role, not as postgres.
+          EOF
+          cat staging/PostgresMcpServer/START-HERE.txt
+
+      - name: Smoke test the packaged build
+        if: matrix.rid == 'linux-x64'
+        run: |
+          cd staging/PostgresMcpServer
+          chmod +x PostgresMcpServer
+          ./PostgresMcpServer --version
+          ./PostgresMcpServer --help
+          ./PostgresMcpServer --init
+          test -f appsettings.json || { echo "--init did not create the config"; exit 1; }
+          if ./PostgresMcpServer --check; then
+            echo "--check should fail against the placeholder password"; exit 1
+          fi
+          rm appsettings.json
+          echo "Packaged build behaves correctly"
+
+      - name: Create archive
+        run: |
+          NAME="PostgresMcpServer-${{ steps.version.outputs.version }}-${{ matrix.rid }}"
+          cd staging
+          mv PostgresMcpServer "$NAME"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            zip -r "../$NAME.zip" "$NAME"
+          else
+            chmod +x "$NAME/PostgresMcpServer"
+            tar czf "../$NAME.tar.gz" "$NAME"
+          fi
+          cd ..
+          ls -la PostgresMcpServer-*
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PostgresMcpServer-${{ matrix.rid }}
+          path: PostgresMcpServer-*.*
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            1. Download the archive for your platform below and unpack it.
+            2. Run `PostgresMcpServer --init` to create `appsettings.json`.
+            3. Edit it, replacing `CHANGE_ME` with your PostgreSQL password.
+            4. Run `PostgresMcpServer --check` to confirm it connects.
+            5. Register the executable with your MCP client — see [docs/clients](docs/clients/README.md).
+
+            Every build is **self-contained**: the .NET runtime is bundled, so nothing else
+            needs installing.
+
+            ## What is in each archive
+
+            | | |
+            |---|---|
+            | `PostgresMcpServer` | The server |
+            | `START-HERE.txt` | Setup in five lines |
+            | `appsettings.example.json` | Every setting, documented |
+            | `examples/` | Client configs for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Gemini CLI and Zed |
+            | `docs/` | Full documentation |
+
+            Verify a download against `SHA256SUMS.txt`.
+
+            ## Before production
+
+            Read [docs/security.md](docs/security.md). Connect as a least-privilege role, not
+            as `postgres` — the in-process guards reduce accidents but are not access control.

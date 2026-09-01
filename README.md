@@ -1,279 +1,153 @@
 # PostgreSQL MCP Server
 
-A Model Context Protocol (MCP) server that enables AI assistants to interact with PostgreSQL databases through a comprehensive set of database management tools.
+A [Model Context Protocol](https://modelcontextprotocol.io) server that lets AI assistants
+work with PostgreSQL — query, explore schemas, modify data, administer roles and take backups
+— with safety guards that are enforced by the database rather than by guessing at SQL.
 
-## Features
+Works with Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Gemini CLI and Zed.
 
-- **Query Execution** - Run SELECT queries with automatic result limiting and execution plans
-- **Schema Exploration** - Browse schemas, tables, columns, indexes, and constraints
-- **Data Modification** - Execute INSERT, UPDATE, DELETE with safety checks
-- **Administration** - Create tables, manage roles, grant privileges
-- **Backup & Restore** - Full database backups using pg_dump/pg_restore
-- **Safety Guards** - Risk assessment, dry-run mode, confirmation prompts for critical operations
-- **Audit Logging** - Track all operations with timestamps and affected rows
-- **Multi-Instance Support** - Safe concurrent usage from multiple Claude instances
+```
+Your AI client  ──stdio──▶  PostgresMcpServer  ──▶  PostgreSQL
+```
 
-## Requirements
+## Quick start
 
-- [.NET 10.0 SDK](https://dotnet.microsoft.com/download) or later
-- PostgreSQL server (tested with PostgreSQL 14+)
-- `pg_dump` and `pg_restore` in PATH (for backup/restore features)
+**No .NET needed.** Releases ship self-contained binaries with the runtime bundled.
 
-## Installation
+1. Download the archive for your platform from
+   [Releases](https://github.com/yourusername/postgres-mcp-server/releases) and unpack it.
 
-### 1. Clone the repository
+2. Open a terminal **in the folder you unpacked** and run:
+
+   **Windows (PowerShell)**
+
+   ```powershell
+   .\PostgresMcpServer.exe --init     # writes appsettings.json next to the exe
+   # now edit appsettings.json and replace CHANGE_ME with your password
+   .\PostgresMcpServer.exe --check    # connects, and tells you what it found
+   ```
+
+   **macOS / Linux**
+
+   ```bash
+   ./PostgresMcpServer --init
+   # now edit appsettings.json and replace CHANGE_ME with your password
+   ./PostgresMcpServer --check
+   ```
+
+   `--check` prints `[ OK ]` per database when it works. If it does not, the error it
+   prints is the real one — see [troubleshooting](docs/troubleshooting.md).
+
+3. Register the executable with your AI client —
+   **[pick your client here](docs/clients/README.md)**. Ready-to-copy configs for each are in
+   the `examples/` folder inside the archive.
+
+<details>
+<summary><b>Building from source instead</b> (contributors, or an unlisted platform)</summary>
+
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
 git clone https://github.com/yourusername/postgres-mcp-server.git
 cd postgres-mcp-server
+
+dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
+./publish/PostgresMcpServer --init
+./publish/PostgresMcpServer --check
 ```
 
-### 2. Configure database connections
+Or run [`scripts/setup.ps1`](scripts/setup.ps1) / [`scripts/setup.sh`](scripts/setup.sh),
+which does all of that and prints the config block for your client with the real path
+already filled in.
 
-Copy the example configuration:
+Add `-r win-x64 --self-contained` (or `linux-x64`, `osx-arm64`, …) to produce a build that
+does not need the .NET runtime installed.
 
-```bash
-cp appsettings.example.json appsettings.json
-```
+</details>
 
-Edit `appsettings.json` with your database connection strings:
+## Documentation
 
-```json
-{
-  "Databases": {
-    "production": "Host=localhost;Port=5432;Database=mydb;Username=postgres;Password=YOUR_PASSWORD",
-    "development": "Host=localhost;Port=5432;Database=devdb;Username=dev_user;Password=YOUR_PASSWORD"
-  },
-  "Safety": {
-    "RequireConfirmation": true,
-    "EnableDryRun": true,
-    "CriticalOperations": ["DROP", "TRUNCATE", "DELETE", "ALTER", "GRANT", "REVOKE"]
-  },
-  "Audit": {
-    "Enabled": true,
-    "LogPath": "audit.log",
-    "LogToConsole": false
-  }
-}
-```
+**[Full documentation →](docs/README.md)**
 
-### 3. Build the project
+| | |
+|---|---|
+| [Installation](docs/installation.md) | Download a release, or build from source; first-run check |
+| [Configuration](docs/configuration.md) | Every setting, connection string cookbook, environment variables |
+| [**Client setup**](docs/clients/README.md) | Claude Desktop · Claude Code · Cursor · VS Code · Windsurf · Cline · Gemini CLI · Zed · ChatGPT |
+| [Tools](docs/tools.md) | All 17 tools and their arguments |
+| [Safety model](docs/safety.md) | What the guards do, and what they do not guarantee |
+| [Security](docs/security.md) | Database roles, least privilege, credentials |
+| [Troubleshooting](docs/troubleshooting.md) | Error messages and what to do about them |
+| [Development](docs/development.md) | Layout, tests, contributing |
 
-```bash
-dotnet build PostgresMcpServer.csproj
-```
+## Setup in one block
 
-## Configuration
-
-### appsettings.json
-
-| Section | Setting | Description |
-|---------|---------|-------------|
-| `Databases` | Key-value pairs | Database name → connection string |
-| `Safety.RequireConfirmation` | `true`/`false` | Require confirmation for critical operations |
-| `Safety.EnableDryRun` | `true`/`false` | Enable dry-run mode for write operations |
-| `Safety.CriticalOperations` | Array | Operations that trigger safety checks |
-| `Audit.Enabled` | `true`/`false` | Enable audit logging |
-| `Audit.LogPath` | String | Path to audit log file |
-| `Audit.LogToConsole` | `true`/`false` | Also log to console |
-
-### Claude Desktop Integration
-
-Add to your Claude Desktop configuration (`claude_desktop_config.json`):
+Point your client at the executable. No arguments, no working directory.
 
 ```json
 {
   "mcpServers": {
     "postgres": {
-      "command": "/path/to/bin/Debug/net10.0/PostgresMcpServer.exe",
-      "cwd": "/path/to/bin/Debug/net10.0"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
 ```
 
-### Claude Code Integration
+VS Code uses `servers` and Zed uses `context_servers` — see
+[client setup](docs/clients/README.md). Ready-to-copy files for every client are in
+[`examples/`](examples/).
 
-Add to your project's `.mcp.json`:
+## Tools
 
-```json
-{
-  "mcpServers": {
-    "postgres": {
-      "command": "/path/to/bin/Debug/net10.0/PostgresMcpServer.exe",
-      "cwd": "/path/to/bin/Debug/net10.0"
-    }
-  }
-}
-```
+| Group | Tools |
+|-------|-------|
+| Query | `query`, `list_databases`, `explain` |
+| Schema | `list_schemas`, `list_tables`, `describe_table`, `get_table_ddl` |
+| Execute | `execute`, `execute_batch` |
+| Admin | `create_table`, `drop_table`, `list_roles`, `create_role`, `grant_privileges`, `get_database_stats` |
+| Backup | `backup`, `restore` |
 
-## Available Tools
+Details in [docs/tools.md](docs/tools.md).
 
-### Query Tools
+## Safety
 
-| Tool | Description |
-|------|-------------|
-| `query` | Execute SELECT queries with automatic LIMIT |
-| `list_databases` | List all configured database connections |
-| `explain` | Get query execution plan (with optional ANALYZE) |
+The guarantees rest on PostgreSQL, not on classifying SQL correctly:
 
-### Schema Tools
+- **Reads run in a `READ ONLY` transaction** that is always rolled back, so a write is refused
+  by the database even if the statement was misclassified.
+- **One call carries one statement.** Multi-statement input is refused, because it defeats
+  every per-statement check.
+- **Comments and literals are ignored** when matching keywords, so
+  `INSERT INTO log VALUES ('user clicked DROP')` is not flagged while `/*c*/DROP TABLE users`
+  is.
+- **Unrecognised statements fail closed**, treated as high-risk writes.
+- **Identifiers are quoted, never interpolated**; passwords are redacted before they reach the
+  audit log.
+- **`EXPLAIN ANALYZE` runs inside a rolled-back transaction**, so you can profile a `DELETE`
+  without losing rows.
 
-| Tool | Description |
-|------|-------------|
-| `list_schemas` | List all schemas in a database |
-| `list_tables` | List tables with optional schema filter |
-| `describe_table` | Get detailed table metadata |
-| `get_table_ddl` | Generate CREATE TABLE DDL statement |
+These reduce accidents. They are **not** access control — use a least-privilege database role.
+See [safety](docs/safety.md) and [security](docs/security.md).
 
-### Execute Tools
+## Requirements
 
-| Tool | Description |
-|------|-------------|
-| `execute` | Run INSERT/UPDATE/DELETE with safety checks |
-| `execute_batch` | Run multiple statements in a transaction |
+- **PostgreSQL** - tested against 16 and 18. That is the only hard requirement.
+- Nothing else to run a release: the .NET runtime is bundled in the archive.
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download) - only to build from source.
+- `pg_dump` / `pg_restore` on `PATH` - only for the `backup` and `restore` tools.
+- Docker - only to run the integration tests.
 
-### Admin Tools
-
-| Tool | Description |
-|------|-------------|
-| `create_table` | Create a new table |
-| `drop_table` | Drop a table (with CASCADE option) |
-| `list_roles` | List database roles and permissions |
-| `create_role` | Create a new database role |
-| `grant_privileges` | Grant table privileges to a role |
-| `get_database_stats` | Get database health metrics |
-
-### Backup Tools
-
-| Tool | Description |
-|------|-------------|
-| `backup` | Create database backup using pg_dump |
-| `restore` | Restore database from backup |
-
-## Safety Features
-
-### Risk Assessment
-
-Every write operation is analyzed for risk level:
-
-- **Low** - Standard INSERT/UPDATE with WHERE clause
-- **Medium** - Bulk operations, ALTER statements
-- **High** - DELETE without WHERE, schema changes
-- **Critical** - DROP DATABASE, TRUNCATE, mass DELETE
-
-### Dry-Run Mode
-
-When enabled, write operations show what would happen without executing:
-
-```
-[DRY RUN] Would execute: DELETE FROM users WHERE status = 'inactive'
-Estimated rows affected: 42
-Risk level: medium
-```
-
-### Confirmation Prompts
-
-Critical operations require explicit confirmation before execution.
-
-## Multi-Instance Support
-
-This server supports multiple concurrent Claude instances safely:
-
-- Each instance gets a unique 8-character ID
-- Audit logs include instance IDs for traceability
-- File-level locking prevents log corruption
-- Connection pooling handles concurrent database access
-
-Example audit log entry:
-```json
-{"Timestamp":"2025-01-15T10:30:00Z","InstanceId":"a1b2c3d4","Database":"production","Operation":"query","Query":"SELECT * FROM users","User":"john","DryRun":false,"Success":true,"RowsAffected":100}
-```
-
-## Security Best Practices
-
-1. **Never commit credentials** - The `.gitignore` excludes `appsettings.json`
-2. **Use read-only users** - Create database users with minimal required permissions
-3. **Enable audit logging** - Track all operations for compliance
-4. **Keep dry-run enabled** - Prevent accidental data modifications
-5. **Review critical operations** - Always verify before confirming destructive actions
-
-### Creating a Read-Only Database User
-
-```sql
-CREATE ROLE mcp_readonly WITH LOGIN PASSWORD 'secure_password';
-GRANT CONNECT ON DATABASE mydb TO mcp_readonly;
-GRANT USAGE ON SCHEMA public TO mcp_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO mcp_readonly;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO mcp_readonly;
-```
-
-## Development
-
-### Project Structure
-
-```
-├── Models/              # Data models
-│   ├── AuditEntry.cs
-│   ├── DatabaseConfig.cs
-│   └── QueryResult.cs
-├── Services/            # Core business logic
-│   ├── AuditLogger.cs
-│   ├── ConnectionManager.cs
-│   ├── PostgresService.cs
-│   └── SafetyGuard.cs
-├── Tools/               # MCP tool definitions
-│   ├── AdminTools.cs
-│   ├── BackupTools.cs
-│   ├── ExecuteTools.cs
-│   ├── QueryTools.cs
-│   └── SchemaTools.cs
-├── Program.cs           # Application entry point
-└── appsettings.example.json
-```
-
-### Building for Production
+## Tests
 
 ```bash
-dotnet publish -c Release -o ./publish
+dotnet test "Postgres mcp.sln"
 ```
 
-### Running Tests
-
-```bash
-dotnet test
-```
-
-## Troubleshooting
-
-### Connection Issues
-
-1. Verify PostgreSQL is running: `pg_isready -h localhost -p 5432`
-2. Check connection string format in `appsettings.json`
-3. Ensure firewall allows connections on PostgreSQL port
-
-### Permission Errors
-
-1. Verify database user has required permissions
-2. Check `pg_hba.conf` allows connections from your host
-3. Review audit logs for specific error messages
-
-### Backup/Restore Failures
-
-1. Ensure `pg_dump` and `pg_restore` are in PATH
-2. Verify PostgreSQL version compatibility
-3. Check disk space for backup files
+Unit tests cover statement classification, quoting, redaction and the shipped example files.
+Integration tests start a throwaway PostgreSQL container and assert the runtime guarantees;
+they are skipped, not failed, when Docker is unavailable.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines before submitting pull requests.
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a pull request
+MIT — see [LICENSE](LICENSE).

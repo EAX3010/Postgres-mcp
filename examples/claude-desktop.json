@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+    },
+
+    "postgres-macos-linux": {
+      "command": "/path/to/Postgres-mcp/publish/PostgresMcpServer"
+    },
+
+    "postgres-env-credentials": {
+      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe",
+      "env": {
+        "POSTGRESMCP_Databases__local": "Host=localhost;Port=5432;Database=myapp;Username=mcp_readonly;Password=YOUR_PASSWORD",
+        "POSTGRESMCP_Safety__ConfirmAtRiskLevel": "Medium",
+        "POSTGRESMCP_Limits__MaxRows": "500"
+      }
+    }
+  }
+}
