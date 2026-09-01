@@ -9,8 +9,21 @@ least one database from one of them:
 2. **`POSTGRESMCP_`-prefixed environment variables** — optional, and they override the file
    where both set the same key.
 
-[`appsettings.example.json`](../appsettings.example.json) is a working example of every
-setting. Copy it and edit.
+To create the file, run:
+
+```bash
+./PostgresMcpServer --init
+```
+
+On Windows PowerShell that is `.\PostgresMcpServer.exe --init` - see
+[running these commands](installation.md#running-these-commands).
+
+That writes a minimal `appsettings.json` next to the executable and refuses to overwrite an
+existing one unless you add `--force`.
+
+[`appsettings.example.json`](../appsettings.example.json) is a larger reference containing
+every setting and seven example connections. Read it for the options; do not copy it wholesale
+as a starting point, or `--check` will try to reach seven databases that do not exist.
 
 Run `PostgresMcpServer --check` after any change; it prints the effective settings and
 connects to every database.

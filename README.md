@@ -12,22 +12,58 @@ Your AI client  ──stdio──▶  PostgresMcpServer  ──▶  PostgreSQL
 
 ## Quick start
 
+**No .NET needed.** Releases ship self-contained binaries with the runtime bundled.
+
+1. Download the archive for your platform from
+   [Releases](https://github.com/yourusername/postgres-mcp-server/releases) and unpack it.
+
+2. Open a terminal **in the folder you unpacked** and run:
+
+   **Windows (PowerShell)**
+
+   ```powershell
+   .\PostgresMcpServer.exe --init     # writes appsettings.json next to the exe
+   # now edit appsettings.json and replace CHANGE_ME with your password
+   .\PostgresMcpServer.exe --check    # connects, and tells you what it found
+   ```
+
+   **macOS / Linux**
+
+   ```bash
+   ./PostgresMcpServer --init
+   # now edit appsettings.json and replace CHANGE_ME with your password
+   ./PostgresMcpServer --check
+   ```
+
+   `--check` prints `[ OK ]` per database when it works. If it does not, the error it
+   prints is the real one — see [troubleshooting](docs/troubleshooting.md).
+
+3. Register the executable with your AI client —
+   **[pick your client here](docs/clients/README.md)**. Ready-to-copy configs for each are in
+   the `examples/` folder inside the archive.
+
+<details>
+<summary><b>Building from source instead</b> (contributors, or an unlisted platform)</summary>
+
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+
 ```bash
-# 1. Build
+git clone https://github.com/yourusername/postgres-mcp-server.git
+cd postgres-mcp-server
+
 dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
-
-# 2. Configure
-cp appsettings.example.json publish/appsettings.json
-#    edit the Databases section
-
-# 3. Verify — before involving any AI client
+./publish/PostgresMcpServer --init
 ./publish/PostgresMcpServer --check
-
-# 4. Register with your client → docs/clients/
 ```
 
-Or run [`scripts/setup.ps1`](scripts/setup.ps1) (Windows) / [`scripts/setup.sh`](scripts/setup.sh),
-which does all four and prints the config block for your client.
+Or run [`scripts/setup.ps1`](scripts/setup.ps1) / [`scripts/setup.sh`](scripts/setup.sh),
+which does all of that and prints the config block for your client with the real path
+already filled in.
+
+Add `-r win-x64 --self-contained` (or `linux-x64`, `osx-arm64`, …) to produce a build that
+does not need the .NET runtime installed.
+
+</details>
 
 ## Documentation
 
@@ -35,7 +71,7 @@ which does all four and prints the config block for your client.
 
 | | |
 |---|---|
-| [Installation](docs/installation.md) | Prerequisites, build, publish, first-run check |
+| [Installation](docs/installation.md) | Download a release, or build from source; first-run check |
 | [Configuration](docs/configuration.md) | Every setting, connection string cookbook, environment variables |
 | [**Client setup**](docs/clients/README.md) | Claude Desktop · Claude Code · Cursor · VS Code · Windsurf · Cline · Gemini CLI · Zed · ChatGPT |
 | [Tools](docs/tools.md) | All 17 tools and their arguments |
@@ -52,7 +88,7 @@ Point your client at the executable. No arguments, no working directory.
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
@@ -96,10 +132,11 @@ See [safety](docs/safety.md) and [security](docs/security.md).
 
 ## Requirements
 
-- [.NET 10.0 SDK](https://dotnet.microsoft.com/download) to build
-- PostgreSQL (tested against 16 and 18)
-- `pg_dump` / `pg_restore` on `PATH`, for the backup tools only
-- Docker, for the integration tests only
+- **PostgreSQL** - tested against 16 and 18. That is the only hard requirement.
+- Nothing else to run a release: the .NET runtime is bundled in the archive.
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download) - only to build from source.
+- `pg_dump` / `pg_restore` on `PATH` - only for the `backup` and `restore` tools.
+- Docker - only to run the integration tests.
 
 ## Tests
 

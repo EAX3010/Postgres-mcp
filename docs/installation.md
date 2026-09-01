@@ -1,6 +1,85 @@
 # Installation
 
-## Prerequisites
+## Install from a release
+
+The quickest route. Releases ship **self-contained** archives — the .NET runtime is bundled,
+so nothing else needs installing.
+
+1. Download the archive for your platform from the
+   [Releases page](https://github.com/yourusername/postgres-mcp-server/releases) and unpack it.
+2. Open a terminal in that folder and create a configuration file:
+
+   ```powershell
+   .\PostgresMcpServer.exe --init     # Windows PowerShell
+   ```
+
+   ```bash
+   ./PostgresMcpServer --init          # macOS / Linux
+   ```
+
+3. Edit the `appsettings.json` it created, replacing `CHANGE_ME` with your password.
+4. Confirm it connects, using the same form as above with `--check`.
+5. Register the executable with your client — see [clients/](clients/README.md).
+
+### Running these commands
+
+Every `PostgresMcpServer ...` command in this documentation is written in the macOS and Linux
+form. Translate it for your shell:
+
+| Shell | Form | Example |
+|-------|------|---------|
+| Windows PowerShell | `.\PostgresMcpServer.exe` | `.\PostgresMcpServer.exe --check` |
+| Windows Command Prompt | `PostgresMcpServer.exe` | `PostgresMcpServer.exe --check` |
+| macOS / Linux / Git Bash | `./PostgresMcpServer` | `./PostgresMcpServer --check` |
+
+The leading `.\` or `./` matters: it says "the program in this folder". Without it, the shell
+searches `PATH` and reports that the command does not exist.
+
+To run it from somewhere else, give the full path. PowerShell needs the call operator `&` when
+the path is quoted:
+
+```powershell
+& "C:\Tools\PostgresMcpServer\PostgresMcpServer.exe" --check
+```
+
+```bash
+/opt/postgres-mcp/PostgresMcpServer --check
+```
+
+On macOS and Linux, mark the binary executable once after unpacking if your archive tool did
+not preserve the bit:
+
+```bash
+chmod +x PostgresMcpServer
+```
+
+### What is in a release archive
+
+| | |
+|---|---|
+| `PostgresMcpServer` / `.exe` | The server. Self-contained |
+| `START-HERE.txt` | The five steps above |
+| `appsettings.example.json` | Every setting, documented, with seven example connections |
+| `examples/` | Ready-to-copy client configs for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Gemini CLI and Zed |
+| `docs/` | This documentation |
+| `README.md`, `CHANGELOG.md`, `LICENSE` | |
+
+No `appsettings.json` ships in a release — `--init` writes it, so nobody inherits someone
+else's credentials.
+
+Verify a download against the `SHA256SUMS.txt` published with the release:
+
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
+```
+
+Archives are built for `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`.
+
+---
+
+## Build from source
+
+### Prerequisites
 
 | | Needed for |
 |---|---|
@@ -12,7 +91,7 @@
 The published output is **framework-dependent**: whoever runs it needs the .NET 10 runtime.
 See [Self-contained builds](#self-contained-builds) to remove that requirement.
 
-## Build
+### Build
 
 ```bash
 git clone https://github.com/yourusername/postgres-mcp-server.git
@@ -35,13 +114,16 @@ There is a setup script that does the build, copies the config template and runs
 ./scripts/setup.sh       # macOS / Linux
 ```
 
-## Configure
+### Configure
 
-Copy the template beside the executable and edit it:
+Let the server write its own starter configuration:
 
 ```bash
-cp appsettings.example.json publish/appsettings.json
+./publish/PostgresMcpServer --init
 ```
+
+Then edit the `appsettings.json` it created, replacing `CHANGE_ME` with your password. Every
+available setting is documented in `appsettings.example.json` beside it.
 
 The file is optional — the whole configuration can come from `POSTGRESMCP_` environment
 variables instead. The server needs at least one database from one source. See

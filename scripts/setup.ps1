@@ -4,9 +4,9 @@
     Builds PostgresMcpServer, prepares its configuration and verifies the setup.
 
 .DESCRIPTION
-    Publishes to ./publish, copies appsettings.example.json if no config exists yet, runs the
-    built-in --check diagnostic, and prints the MCP client configuration block with the real
-    path filled in.
+    Publishes to ./publish, creates a starter appsettings.json via --init if none exists,
+    runs the built-in --check diagnostic, and prints the MCP client configuration block with
+    the real path filled in.
 
 .PARAMETER OutputPath
     Publish directory. Defaults to ./publish.
@@ -59,40 +59,13 @@ if ($LASTEXITCODE -ne 0) { Write-Host "    Publish failed." -ForegroundColor Red
 Write-Host "    Published."
 
 Write-Step "Configuration"
-if (Test-Path $config) {
-    Write-Host "    $config already exists; leaving it alone."
+# The server writes its own starter config, so the template lives in exactly one place.
+& $exe --init
+if (-not (Test-Path $config)) {
+    Write-Host "    --init did not create $config" -ForegroundColor Red
+    exit 1
 }
-else {
-    # A minimal starting point rather than a copy of the reference example, which lists every
-    # option across seven connections and would fail the check below seven times.
-    $starter = @'
-{
-  "Databases": {
-    "local": "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=CHANGE_ME"
-  },
-  "Safety": {
-    "RequireConfirmation": true,
-    "EnableDryRun": true,
-    "ConfirmAtRiskLevel": "High",
-    "AllowMultiStatement": false
-  },
-  "Limits": {
-    "CommandTimeoutSeconds": 30,
-    "MaxRows": 1000,
-    "MaxResponseBytes": 1000000
-  },
-  "Audit": {
-    "Enabled": true,
-    "LogPath": "audit.log",
-    "LogToConsole": false
-  }
-}
-'@
-    Set-Content -Path $config -Value $starter -Encoding utf8
-    Write-Host "    Created $config" -ForegroundColor Yellow
-    Write-Host "    EDIT IT NOW: replace CHANGE_ME with your password." -ForegroundColor Yellow
-    Write-Host "    Every available option is documented in $template"
-}
+Write-Host "    Every available option is documented in $template"
 
 Write-Step "Verifying"
 & $exe --check

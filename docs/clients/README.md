@@ -63,8 +63,13 @@ Run the server's own diagnostic first. It is far more informative than a client'
 "server failed to start":
 
 ```bash
+./PostgresMcpServer --init     # only if you have no appsettings.json yet
 ./PostgresMcpServer --check
 ```
+
+On Windows PowerShell prefix with `.\` and add `.exe`, e.g.
+`.\PostgresMcpServer.exe --check` - see
+[running these commands](../installation.md#running-these-commands).
 
 That validates the config and actually connects to every database. If `--check` passes and
 the client still shows nothing, the problem is the client registration — see

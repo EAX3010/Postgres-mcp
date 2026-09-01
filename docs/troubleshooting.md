@@ -6,6 +6,10 @@
 ./publish/PostgresMcpServer --check
 ```
 
+On Windows PowerShell: `.\publish\PostgresMcpServer.exe --check`. Every command below is
+written in the macOS and Linux form - see
+[running these commands](installation.md#running-these-commands).
+
 It validates the configuration, prints the effective settings, and opens a real connection to
 every database. If it passes and your client still shows nothing, the problem is the client
 registration, not the server.
@@ -16,10 +20,14 @@ registration, not the server.
 
 ### `[FATAL] No databases are configured`
 
-Neither source produced a connection. Either copy `appsettings.example.json` to
-`appsettings.json` **beside the executable** and fill in `Databases`, or set
-`POSTGRESMCP_Databases__<name>` in the environment. See
-[configuration.md](configuration.md).
+Neither source produced a connection. Create a starter file:
+
+```bash
+./PostgresMcpServer --init
+```
+
+Then edit it and replace `CHANGE_ME`. Alternatively set `POSTGRESMCP_Databases__<name>` in the
+environment and use no file at all. See [configuration.md](configuration.md).
 
 `--check` prints the exact path it looked for.
 

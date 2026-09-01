@@ -20,6 +20,9 @@
 │   ├── QueryTools.cs
 │   ├── SchemaTools.cs
 │   └── ToolJson.cs                  # Shared serialization and response size cap
+├── .github/workflows/
+│   ├── ci.yml                       # Build, both test suites, CLI smoke test
+│   └── release.yml                  # Self-contained archives on a version tag
 ├── docs/                            # This documentation
 ├── examples/                        # Ready-to-copy MCP client configs
 ├── scripts/                         # setup.ps1, setup.sh
@@ -27,7 +30,8 @@
 │   ├── PostgresMcpServer.Tests/             # Unit; no database
 │   └── PostgresMcpServer.IntegrationTests/  # Testcontainers; needs Docker
 ├── Program.cs                       # Entry point, CLI flags, DI wiring
-└── appsettings.example.json
+├── appsettings.example.json         # Reference: every setting
+└── CHANGELOG.md
 ```
 
 ### How a tool call flows
@@ -56,6 +60,10 @@ dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
 ```
 
 The server project sets `TreatWarningsAsErrors`, so a warning fails the build.
+
+The build copies `appsettings.example.json`, `examples/` and `LICENSE` alongside the
+executable, so the published output is self-sufficient. `appsettings.json` is never shipped -
+`--init` writes it.
 
 ## Tests
 
@@ -119,9 +127,22 @@ update.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` builds in Release, runs both suites, and verifies `--check` behaves
-correctly when no database is configured. Docker is available on GitHub's Ubuntu runners, so
-the integration tests really run there.
+`.github/workflows/ci.yml` builds in Release, runs both suites, and smoke-tests the CLI:
+`--help` and `--version` succeed, `--check` fails cleanly with nothing configured, `--check`
+succeeds against a service-container PostgreSQL, and stdout carries only JSON-RPC. Docker is
+available on GitHub's Ubuntu runners, so the integration tests really run there.
+
+## Releases
+
+`.github/workflows/release.yml` runs on a `v*` tag, or on demand via `workflow_dispatch` if
+you want to exercise the build matrix without publishing. It produces self-contained archives
+for `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`, each containing the
+executable, `START-HERE.txt`, `appsettings.example.json`, `examples/`, `docs/` and the
+licence. The packaged linux build is smoke-tested before upload, and `SHA256SUMS.txt` is
+published with the release.
+
+Record user-visible changes in [CHANGELOG.md](../CHANGELOG.md) under `[Unreleased]`, then move
+that section under the new version number when you tag.
 
 ## Conventions
 

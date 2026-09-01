@@ -9,6 +9,8 @@
     <RootNamespace>PostgresMcpServer</RootNamespace>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Version>1.0.0</Version>
+    <Description>A Model Context Protocol server for PostgreSQL.</Description>
   </PropertyGroup>
 
   <!-- The test projects live under tests/ and must not be compiled into the server. -->
@@ -22,10 +24,18 @@
     <InternalsVisibleTo Include="PostgresMcpServer.IntegrationTests" />
   </ItemGroup>
 
+  <!--
+    Everything a user needs travels with the executable, so a downloaded release archive is
+    self-sufficient: the settings template, and a ready-to-copy config per MCP client.
+    appsettings.json itself is only copied when the developer has created one locally.
+  -->
   <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="appsettings.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="examples/*.json" Link="examples/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="LICENSE" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

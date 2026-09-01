@@ -59,38 +59,13 @@ dotnet publish "${PUBLISH_ARGS[@]}"
 echo "    Published."
 
 step "Configuration"
-if [ -f "$CONFIG" ]; then
-    echo "    $CONFIG already exists; leaving it alone."
-else
-    # A minimal starting point rather than a copy of the reference example, which lists every
-    # option across seven connections and would fail the check below seven times.
-    cat > "$CONFIG" <<'JSON'
-{
-  "Databases": {
-    "local": "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=CHANGE_ME"
-  },
-  "Safety": {
-    "RequireConfirmation": true,
-    "EnableDryRun": true,
-    "ConfirmAtRiskLevel": "High",
-    "AllowMultiStatement": false
-  },
-  "Limits": {
-    "CommandTimeoutSeconds": 30,
-    "MaxRows": 1000,
-    "MaxResponseBytes": 1000000
-  },
-  "Audit": {
-    "Enabled": true,
-    "LogPath": "audit.log",
-    "LogToConsole": false
-  }
-}
-JSON
-    warn "    Created $CONFIG"
-    warn "    EDIT IT NOW: replace CHANGE_ME with your password."
-    echo "    Every available option is documented in $TEMPLATE"
+# The server writes its own starter config, so the template lives in exactly one place.
+"$EXE" --init
+if [ ! -f "$CONFIG" ]; then
+    warn "    --init did not create $CONFIG"
+    exit 1
 fi
+echo "    Every available option is documented in $TEMPLATE"
 
 step "Verifying"
 CHECK_RESULT=0

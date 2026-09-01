@@ -19,19 +19,24 @@ pick your client from [clients](clients/README.md).
 ## The short version
 
 ```bash
-# 1. Build
-dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
+# 1. Download a release for your platform and unpack it.
+#    Self-contained: no .NET runtime required.
 
-# 2. Configure
-cp appsettings.example.json publish/appsettings.json
-#    edit the Databases section
+# 2. Create the config file
+./PostgresMcpServer --init
+#    edit appsettings.json, replace CHANGE_ME with your password
 
 # 3. Check it works, before involving any AI client
-./publish/PostgresMcpServer --check
+./PostgresMcpServer --check
 
 # 4. Register with your client
 #    see docs/clients/
 ```
+
+Windows PowerShell uses `.\PostgresMcpServer.exe` in place of `./PostgresMcpServer` -
+see [running these commands](installation.md#running-these-commands).
+
+Building from source instead? See [installation.md](installation.md#build-from-source).
 
 ## How the pieces fit
 
