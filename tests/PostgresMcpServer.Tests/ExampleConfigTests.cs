@@ -155,8 +155,33 @@ public class ExampleConfigTests
             Assert.Contains("PostgresMcpServer", command);
 
             // A relative path is resolved inconsistently between clients.
-            Assert.True(Path.IsPathRooted(command), $"'{fileName}' server '{server.Name}' should use an absolute path.");
+            Assert.True(IsAbsolutePath(command!), $"'{fileName}' server '{server.Name}' should use an absolute path.");
         }
+    }
+
+    /// <summary>
+    /// Recognises an absolute path in either convention. Path.IsPathRooted only answers for the
+    /// platform running the test, so a Windows example looks relative on a Linux CI runner.
+    /// </summary>
+    private static bool IsAbsolutePath(string path) =>
+        path.StartsWith('/')                                    // Unix
+        || path.StartsWith(@"\\")                               // Windows UNC
+        || (path.Length >= 3                                    // Windows drive, C:\ or C:/
+            && char.IsLetter(path[0])
+            && path[1] == ':'
+            && (path[2] == '\\' || path[2] == '/'));
+
+    [Theory]
+    [InlineData(@"C:\Tools\PostgresMcpServer.exe", true)]
+    [InlineData("C:/Tools/PostgresMcpServer.exe", true)]
+    [InlineData(@"\\server\share\PostgresMcpServer.exe", true)]
+    [InlineData("/opt/postgres-mcp/PostgresMcpServer", true)]
+    [InlineData("PostgresMcpServer.exe", false)]
+    [InlineData(@".\publish\PostgresMcpServer.exe", false)]
+    [InlineData("./publish/PostgresMcpServer", false)]
+    public void AbsolutePathDetectionIsPlatformIndependent(string path, bool expected)
+    {
+        Assert.Equal(expected, IsAbsolutePath(path));
     }
 
     [Fact]
