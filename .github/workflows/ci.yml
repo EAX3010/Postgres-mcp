@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore "Postgres mcp.sln"
+
+      # The server project sets TreatWarningsAsErrors, so a warning fails here.
+      - name: Build
+        run: dotnet build "Postgres mcp.sln" -c Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test tests/PostgresMcpServer.Tests -c Release --no-build --verbosity normal
+
+      # Docker is available on GitHub's Ubuntu runners, so Testcontainers really starts
+      # PostgreSQL here rather than skipping.
+      - name: Integration tests
+        run: dotnet test tests/PostgresMcpServer.IntegrationTests -c Release --no-build --verbosity normal
+
+  smoke:
+    name: CLI smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        run: dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
+
+      - name: --help and --version succeed
+        run: |
+          ./publish/PostgresMcpServer --help
+          ./publish/PostgresMcpServer --version
+
+      - name: --check fails cleanly when nothing is configured
+        run: |
+          if ./publish/PostgresMcpServer --check; then
+            echo "Expected a non-zero exit code with no databases configured"
+            exit 1
+          fi
+          echo "Exited non-zero as expected"
+
+      - name: --check succeeds against a real database
+        env:
+          POSTGRESMCP_Databases__ci: "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres"
+        run: ./publish/PostgresMcpServer --check
+
+      # stdout carries the JSON-RPC protocol; a stray log line there breaks every client.
+      - name: stdout carries only JSON-RPC
+        env:
+          POSTGRESMCP_Databases__ci: "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres"
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
+            | timeout 20 ./publish/PostgresMcpServer > stdout.txt 2> stderr.txt || true
+          if [ -s stdout.txt ] && grep -qv '^{' stdout.txt; then
+            echo "Non-JSON output found on stdout:"
+            cat stdout.txt
+            exit 1
+          fi
+          echo "stdout is clean"
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5

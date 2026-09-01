@@ -2,7 +2,6 @@ using ModelContextProtocol.Server;
 using PostgresMcpServer.Services;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Text.Json;
 
 namespace PostgresMcpServer.Tools;
 
@@ -10,10 +9,12 @@ namespace PostgresMcpServer.Tools;
 public class BackupTools
 {
     private readonly IConnectionManager _connectionManager;
+    private readonly ISafetyGuard _safetyGuard;
 
-    public BackupTools(IConnectionManager connectionManager)
+    public BackupTools(IConnectionManager connectionManager, ISafetyGuard safetyGuard)
     {
         _connectionManager = connectionManager;
+        _safetyGuard = safetyGuard;
     }
 
     [McpServerTool, Description("Create a database backup using pg_dump")]
@@ -29,16 +30,14 @@ public class BackupTools
         CancellationToken ct = default)
     {
         if (!_connectionManager.DatabaseExists(database))
-        {
             return $"Error: Database '{database}' not found.";
-        }
 
-        // Parse connection string to get pg_dump parameters
-        var connString = GetConnectionStringParts(database);
-        if (connString == null)
-        {
-            return "Error: Could not parse connection string.";
-        }
+        if (schemaOnly && dataOnly)
+            return "Error: schemaOnly and dataOnly are mutually exclusive.";
+
+        var conn = GetConnectionParts(database);
+        if (conn is null)
+            return "Error: Could not parse the connection string for this database.";
 
         var formatArg = format.ToLowerInvariant() switch
         {
@@ -49,90 +48,80 @@ public class BackupTools
             _ => "-Fc"
         };
 
+        // Built as a token list rather than one concatenated string: a path or table name
+        // containing a space would otherwise split into extra arguments, and a value starting
+        // with '-' would be read as an option.
         var args = new List<string>
         {
-            $"-h {connString.Host}",
-            $"-p {connString.Port}",
-            $"-U {connString.Username}",
-            $"-d {connString.Database}",
+            "-h", conn.Host,
+            "-p", conn.Port,
+            "-U", conn.Username,
+            "-d", conn.Database,
+            "-w",               // never prompt for a password; stdin is not a terminal here
             formatArg,
-            $"-f \"{outputPath}\""
+            "-f", outputPath
         };
 
         if (schemaOnly) args.Add("--schema-only");
         if (dataOnly) args.Add("--data-only");
 
-        if (!string.IsNullOrEmpty(tables))
+        foreach (var table in SplitTables(tables))
         {
-            foreach (var table in tables.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                args.Add($"-t {table}");
-            }
+            args.Add("-t");
+            args.Add(table);
         }
 
-        var command = $"pg_dump {string.Join(" ", args)}";
+        var display = DisplayCommand("pg_dump", args, conn.Password);
 
         if (dryRun)
         {
-            return $"[DRY RUN] Would execute:\n\n{command}\n\nNote: Requires PGPASSWORD environment variable or .pgpass file for authentication.";
+            if (!_safetyGuard.Settings.EnableDryRun)
+                return "Error: Dry-run previews are disabled by configuration (Safety.EnableDryRun=false).";
+            return $"[DRY RUN] Would execute:\n\n{display}\n\n" +
+                   "The password is supplied via the PGPASSWORD environment variable of the child process.";
         }
 
         if (!confirm)
         {
-            return JsonSerializer.Serialize(new
+            return ToolJson.Serialize(new
             {
                 requiresConfirmation = true,
                 operation = "BACKUP",
-                command = command.Replace(connString.Password ?? "", "********"),
+                command = display,
                 outputPath,
                 format,
                 message = "Set confirm=true to create the backup."
-            }, new JsonSerializerOptions { WriteIndented = true });
+            });
         }
 
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "pg_dump",
-                Arguments = string.Join(" ", args),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var (exitCode, _, stdErr) = await RunAsync("pg_dump", args, conn, ct);
 
-            if (!string.IsNullOrEmpty(connString.Password))
-            {
-                psi.Environment["PGPASSWORD"] = connString.Password;
-            }
-
-            using var process = Process.Start(psi);
-            if (process == null)
-            {
-                return "Error: Failed to start pg_dump process.";
-            }
-
-            var error = await process.StandardError.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-
-            if (process.ExitCode != 0)
-            {
-                return $"Error: pg_dump failed with exit code {process.ExitCode}.\n{error}";
-            }
+            if (exitCode != 0)
+                return $"Error: pg_dump failed with exit code {exitCode}.\n{stdErr}";
 
             var fileInfo = new FileInfo(outputPath);
-            return JsonSerializer.Serialize(new
+            return ToolJson.Serialize(new
             {
                 success = true,
                 outputPath,
                 format,
-                size = fileInfo.Exists ? $"{fileInfo.Length / 1024.0:F2} KB" : "unknown"
-            }, new JsonSerializerOptions { WriteIndented = true });
+                size = fileInfo.Exists ? $"{fileInfo.Length / 1024.0:F2} KB" : "unknown",
+                warnings = string.IsNullOrWhiteSpace(stdErr) ? null : stdErr
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return "Error: pg_dump was not found. Install the PostgreSQL client tools and ensure pg_dump is in PATH.";
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}\n\nMake sure pg_dump is installed and in your PATH.";
+            return $"Error: {ex.Message}";
         }
     }
 
@@ -147,112 +136,189 @@ public class BackupTools
         CancellationToken ct = default)
     {
         if (!_connectionManager.DatabaseExists(database))
-        {
             return $"Error: Database '{database}' not found.";
-        }
 
         if (!File.Exists(inputPath))
-        {
             return $"Error: Backup file not found: {inputPath}";
-        }
 
-        var connString = GetConnectionStringParts(database);
-        if (connString == null)
-        {
-            return "Error: Could not parse connection string.";
-        }
+        var conn = GetConnectionParts(database);
+        if (conn is null)
+            return "Error: Could not parse the connection string for this database.";
 
         var args = new List<string>
         {
-            $"-h {connString.Host}",
-            $"-p {connString.Port}",
-            $"-U {connString.Username}",
-            $"-d {connString.Database}",
-            $"\"{inputPath}\""
+            "-h", conn.Host,
+            "-p", conn.Port,
+            "-U", conn.Username,
+            "-d", conn.Database,
+            "-w"
         };
 
+        // Options precede the positional filename; appending them afterwards relies on
+        // getopt argument permutation, which is not guaranteed on every platform.
         if (clean) args.Add("--clean");
         if (createDb) args.Add("--create");
+        args.Add(inputPath);
 
-        var command = $"pg_restore {string.Join(" ", args)}";
+        var display = DisplayCommand("pg_restore", args, conn.Password);
 
         if (dryRun)
         {
-            return $"[DRY RUN] Would execute:\n\n{command}\n\nNote: Requires PGPASSWORD environment variable or .pgpass file for authentication.";
+            if (!_safetyGuard.Settings.EnableDryRun)
+                return "Error: Dry-run previews are disabled by configuration (Safety.EnableDryRun=false).";
+            return $"[DRY RUN] Would execute:\n\n{display}\n\n" +
+                   "The password is supplied via the PGPASSWORD environment variable of the child process.";
         }
 
         if (!confirm)
         {
-            return JsonSerializer.Serialize(new
+            return ToolJson.Serialize(new
             {
                 requiresConfirmation = true,
-                riskLevel = clean ? "HIGH" : "MEDIUM",
+                riskLevel = clean ? "critical" : "high",
                 operation = "RESTORE",
-                warning = clean ? "This will DROP existing objects before restoring!" : "This will restore data which may overwrite existing data.",
-                command = command.Replace(connString.Password ?? "", "********"),
+                warning = clean
+                    ? "This DROPS existing objects before restoring them."
+                    : "This restores data and may overwrite existing data.",
+                command = display,
                 inputPath,
                 message = "Set confirm=true to restore the backup."
-            }, new JsonSerializerOptions { WriteIndented = true });
+            });
         }
 
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "pg_restore",
-                Arguments = string.Join(" ", args),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var (exitCode, _, stdErr) = await RunAsync("pg_restore", args, conn, ct);
 
-            if (!string.IsNullOrEmpty(connString.Password))
+            // Exit code is the only reliable success signal. The previous check treated any
+            // failure whose output mentioned "warning" as a success, and pg_restore emits
+            // warnings alongside genuine errors routinely.
+            if (exitCode != 0)
             {
-                psi.Environment["PGPASSWORD"] = connString.Password;
+                return ToolJson.Serialize(new
+                {
+                    success = false,
+                    exitCode,
+                    error = stdErr,
+                    message = "pg_restore reported a failure. The database may be partially restored."
+                });
             }
 
-            using var process = Process.Start(psi);
-            if (process == null)
-            {
-                return "Error: Failed to start pg_restore process.";
-            }
-
-            var error = await process.StandardError.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-
-            // pg_restore often returns warnings that aren't fatal
-            if (process.ExitCode != 0 && !error.Contains("warning", StringComparison.OrdinalIgnoreCase))
-            {
-                return $"Error: pg_restore failed with exit code {process.ExitCode}.\n{error}";
-            }
-
-            return JsonSerializer.Serialize(new
+            return ToolJson.Serialize(new
             {
                 success = true,
                 inputPath,
-                warnings = string.IsNullOrEmpty(error) ? null : error
-            }, new JsonSerializerOptions { WriteIndented = true });
+                warnings = string.IsNullOrWhiteSpace(stdErr) ? null : stdErr
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return "Error: pg_restore was not found. Install the PostgreSQL client tools and ensure pg_restore is in PATH.";
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}\n\nMake sure pg_restore is installed and in your PATH.";
+            return $"Error: {ex.Message}";
         }
     }
 
-    private ConnectionParts? GetConnectionStringParts(string database)
+    private static IEnumerable<string> SplitTables(string? tables) =>
+        string.IsNullOrWhiteSpace(tables)
+            ? []
+            : tables.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>
+    /// Renders the command for display. The password is never on the command line, but any
+    /// accidental occurrence is masked. Guards against the empty-string case, where
+    /// string.Replace throws ArgumentException.
+    /// </summary>
+    private static string DisplayCommand(string exe, IEnumerable<string> args, string? password)
+    {
+        var rendered = $"{exe} {string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a))}";
+        return string.IsNullOrEmpty(password) ? rendered : rendered.Replace(password, "********");
+    }
+
+    /// <summary>
+    /// Starts the child process, drains both pipes concurrently (an unread pipe eventually
+    /// fills and deadlocks), and kills the process tree if the call is cancelled - a restore
+    /// left running after cancellation keeps writing to the database.
+    /// </summary>
+    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunAsync(
+        string fileName, IEnumerable<string> args, ConnectionParts conn, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+
+        if (!string.IsNullOrEmpty(conn.Password)) psi.Environment["PGPASSWORD"] = conn.Password;
+        if (!string.IsNullOrEmpty(conn.SslMode)) psi.Environment["PGSSLMODE"] = conn.SslMode;
+        if (!string.IsNullOrEmpty(conn.RootCertificate)) psi.Environment["PGSSLROOTCERT"] = conn.RootCertificate;
+        if (conn.TimeoutSeconds > 0) psi.Environment["PGCONNECT_TIMEOUT"] = conn.TimeoutSeconds.ToString();
+
+        using var process = new Process { StartInfo = psi };
+        if (!process.Start())
+            throw new InvalidOperationException($"Failed to start {fileName}.");
+
+        var stdOutTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        var stdErrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
+
+        try
+        {
+            await process.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[PROCESS-KILL-FAILURE] Could not stop {fileName}: {ex.Message}");
+            }
+            throw;
+        }
+
+        return (process.ExitCode, await stdOutTask, await stdErrTask);
+    }
+
+    private ConnectionParts? GetConnectionParts(string database)
     {
         try
         {
             var dataSource = _connectionManager.GetDataSource(database);
             var builder = new Npgsql.NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
+
             return new ConnectionParts
             {
                 Host = builder.Host ?? "localhost",
                 Port = builder.Port.ToString(),
                 Database = builder.Database ?? database,
                 Username = builder.Username ?? "",
-                Password = builder.Password
+                Password = builder.Password,
+                // Carried through so a TLS-required server does not silently reject the dump.
+                SslMode = builder.SslMode.ToString().ToLowerInvariant() switch
+                {
+                    "disable" => "disable",
+                    "allow" => "allow",
+                    "prefer" => "prefer",
+                    "require" => "require",
+                    "verifyca" => "verify-ca",
+                    "verifyfull" => "verify-full",
+                    _ => null
+                },
+                RootCertificate = builder.RootCertificate,
+                TimeoutSeconds = builder.Timeout
             };
         }
         catch
@@ -268,5 +334,8 @@ public class BackupTools
         public string Database { get; set; } = "";
         public string Username { get; set; } = "";
         public string? Password { get; set; }
+        public string? SslMode { get; set; }
+        public string? RootCertificate { get; set; }
+        public int TimeoutSeconds { get; set; }
     }
 }

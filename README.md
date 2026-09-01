@@ -1,279 +1,116 @@
 # PostgreSQL MCP Server
 
-A Model Context Protocol (MCP) server that enables AI assistants to interact with PostgreSQL databases through a comprehensive set of database management tools.
+A [Model Context Protocol](https://modelcontextprotocol.io) server that lets AI assistants
+work with PostgreSQL — query, explore schemas, modify data, administer roles and take backups
+— with safety guards that are enforced by the database rather than by guessing at SQL.
 
-## Features
+Works with Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Gemini CLI and Zed.
 
-- **Query Execution** - Run SELECT queries with automatic result limiting and execution plans
-- **Schema Exploration** - Browse schemas, tables, columns, indexes, and constraints
-- **Data Modification** - Execute INSERT, UPDATE, DELETE with safety checks
-- **Administration** - Create tables, manage roles, grant privileges
-- **Backup & Restore** - Full database backups using pg_dump/pg_restore
-- **Safety Guards** - Risk assessment, dry-run mode, confirmation prompts for critical operations
-- **Audit Logging** - Track all operations with timestamps and affected rows
-- **Multi-Instance Support** - Safe concurrent usage from multiple Claude instances
+```
+Your AI client  ──stdio──▶  PostgresMcpServer  ──▶  PostgreSQL
+```
+
+## Quick start
+
+```bash
+# 1. Build
+dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
+
+# 2. Configure
+cp appsettings.example.json publish/appsettings.json
+#    edit the Databases section
+
+# 3. Verify — before involving any AI client
+./publish/PostgresMcpServer --check
+
+# 4. Register with your client → docs/clients/
+```
+
+Or run [`scripts/setup.ps1`](scripts/setup.ps1) (Windows) / [`scripts/setup.sh`](scripts/setup.sh),
+which does all four and prints the config block for your client.
+
+## Documentation
+
+**[Full documentation →](docs/README.md)**
+
+| | |
+|---|---|
+| [Installation](docs/installation.md) | Prerequisites, build, publish, first-run check |
+| [Configuration](docs/configuration.md) | Every setting, connection string cookbook, environment variables |
+| [**Client setup**](docs/clients/README.md) | Claude Desktop · Claude Code · Cursor · VS Code · Windsurf · Cline · Gemini CLI · Zed · ChatGPT |
+| [Tools](docs/tools.md) | All 17 tools and their arguments |
+| [Safety model](docs/safety.md) | What the guards do, and what they do not guarantee |
+| [Security](docs/security.md) | Database roles, least privilege, credentials |
+| [Troubleshooting](docs/troubleshooting.md) | Error messages and what to do about them |
+| [Development](docs/development.md) | Layout, tests, contributing |
+
+## Setup in one block
+
+Point your client at the executable. No arguments, no working directory.
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+    }
+  }
+}
+```
+
+VS Code uses `servers` and Zed uses `context_servers` — see
+[client setup](docs/clients/README.md). Ready-to-copy files for every client are in
+[`examples/`](examples/).
+
+## Tools
+
+| Group | Tools |
+|-------|-------|
+| Query | `query`, `list_databases`, `explain` |
+| Schema | `list_schemas`, `list_tables`, `describe_table`, `get_table_ddl` |
+| Execute | `execute`, `execute_batch` |
+| Admin | `create_table`, `drop_table`, `list_roles`, `create_role`, `grant_privileges`, `get_database_stats` |
+| Backup | `backup`, `restore` |
+
+Details in [docs/tools.md](docs/tools.md).
+
+## Safety
+
+The guarantees rest on PostgreSQL, not on classifying SQL correctly:
+
+- **Reads run in a `READ ONLY` transaction** that is always rolled back, so a write is refused
+  by the database even if the statement was misclassified.
+- **One call carries one statement.** Multi-statement input is refused, because it defeats
+  every per-statement check.
+- **Comments and literals are ignored** when matching keywords, so
+  `INSERT INTO log VALUES ('user clicked DROP')` is not flagged while `/*c*/DROP TABLE users`
+  is.
+- **Unrecognised statements fail closed**, treated as high-risk writes.
+- **Identifiers are quoted, never interpolated**; passwords are redacted before they reach the
+  audit log.
+- **`EXPLAIN ANALYZE` runs inside a rolled-back transaction**, so you can profile a `DELETE`
+  without losing rows.
+
+These reduce accidents. They are **not** access control — use a least-privilege database role.
+See [safety](docs/safety.md) and [security](docs/security.md).
 
 ## Requirements
 
-- [.NET 10.0 SDK](https://dotnet.microsoft.com/download) or later
-- PostgreSQL server (tested with PostgreSQL 14+)
-- `pg_dump` and `pg_restore` in PATH (for backup/restore features)
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download) to build
+- PostgreSQL (tested against 16 and 18)
+- `pg_dump` / `pg_restore` on `PATH`, for the backup tools only
+- Docker, for the integration tests only
 
-## Installation
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/yourusername/postgres-mcp-server.git
-cd postgres-mcp-server
-```
-
-### 2. Configure database connections
-
-Copy the example configuration:
+## Tests
 
 ```bash
-cp appsettings.example.json appsettings.json
+dotnet test "Postgres mcp.sln"
 ```
 
-Edit `appsettings.json` with your database connection strings:
-
-```json
-{
-  "Databases": {
-    "production": "Host=localhost;Port=5432;Database=mydb;Username=postgres;Password=YOUR_PASSWORD",
-    "development": "Host=localhost;Port=5432;Database=devdb;Username=dev_user;Password=YOUR_PASSWORD"
-  },
-  "Safety": {
-    "RequireConfirmation": true,
-    "EnableDryRun": true,
-    "CriticalOperations": ["DROP", "TRUNCATE", "DELETE", "ALTER", "GRANT", "REVOKE"]
-  },
-  "Audit": {
-    "Enabled": true,
-    "LogPath": "audit.log",
-    "LogToConsole": false
-  }
-}
-```
-
-### 3. Build the project
-
-```bash
-dotnet build PostgresMcpServer.csproj
-```
-
-## Configuration
-
-### appsettings.json
-
-| Section | Setting | Description |
-|---------|---------|-------------|
-| `Databases` | Key-value pairs | Database name → connection string |
-| `Safety.RequireConfirmation` | `true`/`false` | Require confirmation for critical operations |
-| `Safety.EnableDryRun` | `true`/`false` | Enable dry-run mode for write operations |
-| `Safety.CriticalOperations` | Array | Operations that trigger safety checks |
-| `Audit.Enabled` | `true`/`false` | Enable audit logging |
-| `Audit.LogPath` | String | Path to audit log file |
-| `Audit.LogToConsole` | `true`/`false` | Also log to console |
-
-### Claude Desktop Integration
-
-Add to your Claude Desktop configuration (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "postgres": {
-      "command": "/path/to/bin/Debug/net10.0/PostgresMcpServer.exe",
-      "cwd": "/path/to/bin/Debug/net10.0"
-    }
-  }
-}
-```
-
-### Claude Code Integration
-
-Add to your project's `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "postgres": {
-      "command": "/path/to/bin/Debug/net10.0/PostgresMcpServer.exe",
-      "cwd": "/path/to/bin/Debug/net10.0"
-    }
-  }
-}
-```
-
-## Available Tools
-
-### Query Tools
-
-| Tool | Description |
-|------|-------------|
-| `query` | Execute SELECT queries with automatic LIMIT |
-| `list_databases` | List all configured database connections |
-| `explain` | Get query execution plan (with optional ANALYZE) |
-
-### Schema Tools
-
-| Tool | Description |
-|------|-------------|
-| `list_schemas` | List all schemas in a database |
-| `list_tables` | List tables with optional schema filter |
-| `describe_table` | Get detailed table metadata |
-| `get_table_ddl` | Generate CREATE TABLE DDL statement |
-
-### Execute Tools
-
-| Tool | Description |
-|------|-------------|
-| `execute` | Run INSERT/UPDATE/DELETE with safety checks |
-| `execute_batch` | Run multiple statements in a transaction |
-
-### Admin Tools
-
-| Tool | Description |
-|------|-------------|
-| `create_table` | Create a new table |
-| `drop_table` | Drop a table (with CASCADE option) |
-| `list_roles` | List database roles and permissions |
-| `create_role` | Create a new database role |
-| `grant_privileges` | Grant table privileges to a role |
-| `get_database_stats` | Get database health metrics |
-
-### Backup Tools
-
-| Tool | Description |
-|------|-------------|
-| `backup` | Create database backup using pg_dump |
-| `restore` | Restore database from backup |
-
-## Safety Features
-
-### Risk Assessment
-
-Every write operation is analyzed for risk level:
-
-- **Low** - Standard INSERT/UPDATE with WHERE clause
-- **Medium** - Bulk operations, ALTER statements
-- **High** - DELETE without WHERE, schema changes
-- **Critical** - DROP DATABASE, TRUNCATE, mass DELETE
-
-### Dry-Run Mode
-
-When enabled, write operations show what would happen without executing:
-
-```
-[DRY RUN] Would execute: DELETE FROM users WHERE status = 'inactive'
-Estimated rows affected: 42
-Risk level: medium
-```
-
-### Confirmation Prompts
-
-Critical operations require explicit confirmation before execution.
-
-## Multi-Instance Support
-
-This server supports multiple concurrent Claude instances safely:
-
-- Each instance gets a unique 8-character ID
-- Audit logs include instance IDs for traceability
-- File-level locking prevents log corruption
-- Connection pooling handles concurrent database access
-
-Example audit log entry:
-```json
-{"Timestamp":"2025-01-15T10:30:00Z","InstanceId":"a1b2c3d4","Database":"production","Operation":"query","Query":"SELECT * FROM users","User":"john","DryRun":false,"Success":true,"RowsAffected":100}
-```
-
-## Security Best Practices
-
-1. **Never commit credentials** - The `.gitignore` excludes `appsettings.json`
-2. **Use read-only users** - Create database users with minimal required permissions
-3. **Enable audit logging** - Track all operations for compliance
-4. **Keep dry-run enabled** - Prevent accidental data modifications
-5. **Review critical operations** - Always verify before confirming destructive actions
-
-### Creating a Read-Only Database User
-
-```sql
-CREATE ROLE mcp_readonly WITH LOGIN PASSWORD 'secure_password';
-GRANT CONNECT ON DATABASE mydb TO mcp_readonly;
-GRANT USAGE ON SCHEMA public TO mcp_readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO mcp_readonly;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO mcp_readonly;
-```
-
-## Development
-
-### Project Structure
-
-```
-├── Models/              # Data models
-│   ├── AuditEntry.cs
-│   ├── DatabaseConfig.cs
-│   └── QueryResult.cs
-├── Services/            # Core business logic
-│   ├── AuditLogger.cs
-│   ├── ConnectionManager.cs
-│   ├── PostgresService.cs
-│   └── SafetyGuard.cs
-├── Tools/               # MCP tool definitions
-│   ├── AdminTools.cs
-│   ├── BackupTools.cs
-│   ├── ExecuteTools.cs
-│   ├── QueryTools.cs
-│   └── SchemaTools.cs
-├── Program.cs           # Application entry point
-└── appsettings.example.json
-```
-
-### Building for Production
-
-```bash
-dotnet publish -c Release -o ./publish
-```
-
-### Running Tests
-
-```bash
-dotnet test
-```
-
-## Troubleshooting
-
-### Connection Issues
-
-1. Verify PostgreSQL is running: `pg_isready -h localhost -p 5432`
-2. Check connection string format in `appsettings.json`
-3. Ensure firewall allows connections on PostgreSQL port
-
-### Permission Errors
-
-1. Verify database user has required permissions
-2. Check `pg_hba.conf` allows connections from your host
-3. Review audit logs for specific error messages
-
-### Backup/Restore Failures
-
-1. Ensure `pg_dump` and `pg_restore` are in PATH
-2. Verify PostgreSQL version compatibility
-3. Check disk space for backup files
+Unit tests cover statement classification, quoting, redaction and the shipped example files.
+Integration tests start a throwaway PostgreSQL container and assert the runtime guarantees;
+they are skipped, not failed, when Docker is unavailable.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines before submitting pull requests.
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a pull request
+MIT — see [LICENSE](LICENSE).

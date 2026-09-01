@@ -11,6 +11,9 @@ public class AuditEntry
     public string Query { get; set; } = string.Empty;
     public string User { get; set; } = Environment.UserName;
     public bool DryRun { get; set; }
+    public bool Confirmed { get; set; }
+    public bool Rejected { get; set; }
+    public string? RiskLevel { get; set; }
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
     public int RowsAffected { get; set; }
