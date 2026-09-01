@@ -138,7 +138,7 @@ static int RunInit(string baseDir, bool force)
              Ready-to-copy files for each client are in the examples folder beside
              this executable, and every option is documented in appsettings.example.json.
 
-        Full documentation: https://github.com/yourusername/postgres-mcp-server
+        Full documentation: https://github.com/EAX3010/Postgres-mcp
         """);
 
     return 0;

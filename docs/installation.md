@@ -6,7 +6,7 @@ The quickest route. Releases ship **self-contained** archives — the .NET runti
 so nothing else needs installing.
 
 1. Download the archive for your platform from the
-   [Releases page](https://github.com/yourusername/postgres-mcp-server/releases) and unpack it.
+   [Releases page](https://github.com/EAX3010/Postgres-mcp/releases) and unpack it.
 2. Open a terminal in that folder and create a configuration file:
 
    ```powershell
@@ -94,8 +94,8 @@ See [Self-contained builds](#self-contained-builds) to remove that requirement.
 ### Build
 
 ```bash
-git clone https://github.com/yourusername/postgres-mcp-server.git
-cd postgres-mcp-server
+git clone https://github.com/EAX3010/Postgres-mcp.git
+cd Postgres-mcp
 
 dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
 ```

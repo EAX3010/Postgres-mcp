@@ -15,7 +15,7 @@ Your AI client  ──stdio──▶  PostgresMcpServer  ──▶  PostgreSQL
 **No .NET needed.** Releases ship self-contained binaries with the runtime bundled.
 
 1. Download the archive for your platform from
-   [Releases](https://github.com/yourusername/postgres-mcp-server/releases) and unpack it.
+   [Releases](https://github.com/EAX3010/Postgres-mcp/releases) and unpack it.
 
 2. Open a terminal **in the folder you unpacked** and run:
 
@@ -48,8 +48,8 @@ Your AI client  ──stdio──▶  PostgresMcpServer  ──▶  PostgreSQL
 Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
-git clone https://github.com/yourusername/postgres-mcp-server.git
-cd postgres-mcp-server
+git clone https://github.com/EAX3010/Postgres-mcp.git
+cd Postgres-mcp
 
 dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
 ./publish/PostgresMcpServer --init
