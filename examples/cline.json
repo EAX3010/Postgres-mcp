@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe",
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe",
       "disabled": false,
       "autoApprove": []
     }

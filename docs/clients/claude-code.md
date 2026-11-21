@@ -2,6 +2,9 @@
 
 Anthropic's CLI and IDE extension. Registers MCP servers through its own command.
 
+> **The quick way:** run `PostgresMcpServer --setup`. It prints the `claude mcp add` command below with the real path already filled in.
+> The rest of this page is for doing it by hand.
+
 ## Where the config lives
 
 Managed by the `claude mcp` command rather than by hand. Project scope writes `.mcp.json`
@@ -13,7 +16,7 @@ in the repository root.
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
@@ -22,7 +25,7 @@ in the repository root.
 Ready to copy: [`examples/claude-code.mcp.json`](../../examples/claude-code.mcp.json)
 
 On macOS and Linux use the extensionless binary path instead:
-`/path/to/Postgres-mcp/publish/PostgresMcpServer`
+`/path/to/PostgresMcpServer/PostgresMcpServer`
 
 ## Verify
 
@@ -37,7 +40,7 @@ Or run `/mcp` inside a session.
 Prefer the CLI over editing files:
 
 ```bash
-claude mcp add postgres --scope user "C:\path\to\Postgres-mcp\publish\PostgresMcpServer.exe"
+claude mcp add postgres --scope user "C:\path\to\PostgresMcpServer\PostgresMcpServer.exe"
 ```
 
 | Scope | Effect |

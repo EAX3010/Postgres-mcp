@@ -2,6 +2,9 @@
 
 Anthropic's desktop app. It launches stdio MCP servers, which is exactly what this is.
 
+> **The quick way:** run `PostgresMcpServer --setup`. It finds Claude Desktop and adds the server to the file below for you.
+> The rest of this page is for doing it by hand.
+
 ## Where the config lives
 
 - **Windows** - `%APPDATA%\Claude\claude_desktop_config.json`
@@ -15,7 +18,7 @@ Create the file if it does not exist.
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
@@ -24,7 +27,7 @@ Create the file if it does not exist.
 Ready to copy: [`examples/claude-desktop.json`](../../examples/claude-desktop.json)
 
 On macOS and Linux use the extensionless binary path instead:
-`/path/to/Postgres-mcp/publish/PostgresMcpServer`
+`/path/to/PostgresMcpServer/PostgresMcpServer`
 
 ## Verify
 

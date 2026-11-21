@@ -2,6 +2,9 @@
 
 Codeium's AI editor, with MCP support in Cascade.
 
+> **The quick way:** run `PostgresMcpServer --setup`. It finds Windsurf and adds the server to the file below for you.
+> The rest of this page is for doing it by hand.
+
 ## Where the config lives
 
 `~/.codeium/windsurf/mcp_config.json`
@@ -12,7 +15,7 @@ Codeium's AI editor, with MCP support in Cascade.
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
@@ -21,7 +24,7 @@ Codeium's AI editor, with MCP support in Cascade.
 Ready to copy: [`examples/windsurf.json`](../../examples/windsurf.json)
 
 On macOS and Linux use the extensionless binary path instead:
-`/path/to/Postgres-mcp/publish/PostgresMcpServer`
+`/path/to/PostgresMcpServer/PostgresMcpServer`
 
 ## Verify
 

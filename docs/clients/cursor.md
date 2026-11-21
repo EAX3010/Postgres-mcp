@@ -2,6 +2,9 @@
 
 AI-first code editor with MCP support.
 
+> **The quick way:** run `PostgresMcpServer --setup`. It finds Cursor and adds the server to the global file below for you.
+> The rest of this page is for doing it by hand.
+
 ## Where the config lives
 
 - **Project** - `.cursor/mcp.json` in the repository root
@@ -13,7 +16,7 @@ AI-first code editor with MCP support.
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
@@ -22,7 +25,7 @@ AI-first code editor with MCP support.
 Ready to copy: [`examples/cursor.json`](../../examples/cursor.json)
 
 On macOS and Linux use the extensionless binary path instead:
-`/path/to/Postgres-mcp/publish/PostgresMcpServer`
+`/path/to/PostgresMcpServer/PostgresMcpServer`
 
 ## Verify
 

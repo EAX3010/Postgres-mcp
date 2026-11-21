@@ -3,27 +3,29 @@
 Settings come from two sources, and **neither is individually required**. The server needs at
 least one database from one of them:
 
-1. **`appsettings.json` beside the executable** — optional. `publish` and `build` copy it to
-   the output directory, and the server resolves it against its own location rather than the
-   working directory, so no `cwd` setting is needed in any MCP client config.
+1. **`appsettings.json` beside the executable** — optional. The server resolves it against
+   its own location rather than the working directory, so no `cwd` setting is needed in any
+   MCP client config.
 2. **`POSTGRESMCP_`-prefixed environment variables** — optional, and they override the file
    where both set the same key.
 
-To create the file, run:
+When neither names a database, [`DATABASE_URL`](#database_url) is used if it is set.
+
+The guided setup writes the file for you, after testing the connection:
 
 ```bash
-./PostgresMcpServer --init
+./PostgresMcpServer --setup
 ```
 
-On Windows PowerShell that is `.\PostgresMcpServer.exe --init` - see
+On Windows PowerShell that is `.\PostgresMcpServer.exe --setup` - see
 [running these commands](installation.md#running-these-commands).
 
-That writes a minimal `appsettings.json` next to the executable and refuses to overwrite an
-existing one unless you add `--force`.
+To write a starter file and edit it yourself instead, use `--init`. It refuses to overwrite an
+existing file unless you add `--force`.
 
 [`appsettings.example.json`](../appsettings.example.json) is a larger reference containing
-every setting and seven example connections. Read it for the options; do not copy it wholesale
-as a starting point, or `--check` will try to reach seven databases that do not exist.
+every setting and several example connections. Read it for the options; do not copy it
+wholesale as a starting point, or `--check` will try to reach databases that do not exist.
 
 Run `PostgresMcpServer --check` after any change; it prints the effective settings and
 connects to every database.
@@ -32,12 +34,15 @@ connects to every database.
 
 ## Databases
 
-A map of connection name → Npgsql connection string. **The name is what you say to the
-assistant** ("query the `analytics` database") and what every tool takes as its `database`
-argument.
+A map of connection name → connection. **The name is what you say to the assistant** ("query
+the `analytics` database") and what every tool takes as its `database` argument.
+
+A connection is written either as a `postgres://` URL or as an Npgsql keyword string. Use
+whichever you already have; the two can be mixed.
 
 ```json
 "Databases": {
+  "hosted":       "postgres://mcp_readonly:YOUR_PASSWORD@db.example.com:5432/myapp?sslmode=require",
   "local":        "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=YOUR_PASSWORD",
   "app_readonly": "Host=localhost;Port=5432;Database=myapp;Username=mcp_readonly;Password=YOUR_PASSWORD",
   "app_write":    "Host=localhost;Port=5432;Database=myapp;Username=mcp_writer;Password=YOUR_PASSWORD;Include Error Detail=true"
@@ -47,12 +52,41 @@ argument.
 Two entries may point at the same database through different roles. That is a useful pattern:
 give the assistant `app_readonly` by default and reach for `app_write` deliberately.
 
-A connection string that fails to parse is skipped with a `[CONFIG-ERROR]` on stderr. The
-remaining databases still load, and `list_databases` reports which were dropped.
+A connection that fails to parse is skipped with a `[CONFIG-ERROR]` on stderr. The remaining
+databases still load, and `list_databases` reports which were dropped.
+
+### Connection URLs
+
+```
+postgres://user:password@host:port/database?parameter=value&...
+```
+
+`postgresql://` works too. The port defaults to `5432` and the host to `localhost`.
+
+**Special characters in the password.** `@`, `:`, `/` and `#` are accepted as they are. `?` and
+`%` must be percent-encoded (`%3F`, `%25`), as must anything else you want taken literally.
+A URL that cannot be parsed is reported without quoting any part of it, so a mistyped
+password does not end up in a log.
+
+These parameters are understood after the `?`:
+
+| URL parameter | Meaning |
+|---------------|---------|
+| `sslmode` | `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full` |
+| `sslrootcert`, `sslcert`, `sslkey`, `sslpassword` | Certificate files and the key's password |
+| `channel_binding` | `disable`, `prefer`, `require` |
+| `application_name` | Shown in `pg_stat_activity` |
+| `connect_timeout` | Seconds to wait for the connection |
+| `options` | Passed to the server as startup options |
+| any keyword from the cookbook below | Written with `%20` for a space: `?Include%20Error%20Detail=true` |
+
+Any other parameter is an error rather than being silently dropped — some tools add their own,
+such as Prisma's `pgbouncer=true`, which mean nothing here. Remove them.
 
 ### Connection string cookbook
 
-Every line below appears in `appsettings.example.json` and is parsed by the test suite.
+Keywords for the `Host=...;Database=...` form. Every line below appears in
+`appsettings.example.json` and is parsed by the test suite.
 
 | Goal | Add to the connection string |
 |------|------------------------------|
@@ -175,6 +209,28 @@ per-server — see [`examples/env-only.json`](../examples/env-only.json).
 
 Environment values win over the file. A list such as `CriticalOperations` is awkward to set
 this way (`POSTGRESMCP_Safety__CriticalOperations__0`) — prefer the file for those.
+
+### `DATABASE_URL`
+
+The variable most hosts and `.env` files already use. When **no** database is configured in
+the file or through `POSTGRESMCP_Databases__*`, the server uses `DATABASE_URL` as a database
+named `default`:
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe",
+      "env": { "DATABASE_URL": "postgres://user:password@localhost:5432/mydb" }
+    }
+  }
+}
+```
+
+It is deliberately only a fallback. Developer shells often export a `DATABASE_URL` for the
+application being worked on, usually with a read-write role; picking that up alongside a
+configuration you pointed at a read-only role would give the assistant more access than you
+chose. When it is set but ignored, the server says so on stderr and `--check` shows it.
 
 ---
 

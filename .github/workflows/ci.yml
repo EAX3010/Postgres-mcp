@@ -67,6 +67,21 @@ jobs:
           POSTGRESMCP_Databases__ci: "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres"
         run: ./publish/PostgresMcpServer --check
 
+      # The form every hosting dashboard and .env file hands out, with no file at all.
+      - name: --check succeeds with a postgres:// URL in DATABASE_URL
+        env:
+          DATABASE_URL: "postgres://postgres:postgres@localhost:5432/postgres"
+        run: ./publish/PostgresMcpServer --check
+
+      # Answers: the connection, Enter for the suggested name, and N in case the runner
+      # image happens to have an AI client's config directory.
+      - name: --setup saves a connection that --check then accepts
+        run: |
+          printf '%s\n' 'postgres://postgres:postgres@localhost:5432/postgres' '' 'n' \
+            | ./publish/PostgresMcpServer --setup
+          ./publish/PostgresMcpServer --check
+          rm ./publish/appsettings.json
+
       # stdout carries the JSON-RPC protocol; a stray log line there breaks every client.
       - name: stdout carries only JSON-RPC
         env:

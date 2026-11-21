@@ -2,6 +2,9 @@
 
 Autonomous coding agent that runs as a VS Code extension.
 
+> **The quick way:** run `PostgresMcpServer --setup`. It finds Cline and adds the server to its settings file for you, with `autoApprove` left empty.
+> The rest of this page is for doing it by hand.
+
 ## Where the config lives
 
 Managed through the extension UI. The underlying file is `cline_mcp_settings.json` in the
@@ -13,7 +16,7 @@ extension's storage directory - reach it via the MCP Servers icon, then Configur
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe",
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe",
       "disabled": false,
       "autoApprove": []
     }
@@ -24,7 +27,7 @@ extension's storage directory - reach it via the MCP Servers icon, then Configur
 Ready to copy: [`examples/cline.json`](../../examples/cline.json)
 
 On macOS and Linux use the extensionless binary path instead:
-`/path/to/Postgres-mcp/publish/PostgresMcpServer`
+`/path/to/PostgresMcpServer/PostgresMcpServer`
 
 ## Verify
 

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using PostgresMcpServer.Models;
+using PostgresMcpServer.Services;
 using System.Text.Json;
 
 namespace PostgresMcpServer.Tests;
@@ -34,7 +35,7 @@ public class ExampleConfigTests
     {
         foreach (var (name, connectionString) in BindExample().Databases)
         {
-            var exception = Record.Exception(() => new NpgsqlConnectionStringBuilder(connectionString));
+            var exception = Record.Exception(() => ConnectionStrings.Parse(connectionString));
             Assert.True(exception is null, $"Database '{name}' has an unparseable connection string: {exception?.Message}");
         }
     }
@@ -44,7 +45,7 @@ public class ExampleConfigTests
     {
         foreach (var (name, connectionString) in BindExample().Databases)
         {
-            var builder = new NpgsqlConnectionStringBuilder(connectionString);
+            var builder = ConnectionStrings.Parse(connectionString);
 
             Assert.False(string.IsNullOrWhiteSpace(builder.Host), $"Database '{name}' has no Host.");
             Assert.False(string.IsNullOrWhiteSpace(builder.Database), $"Database '{name}' has no Database.");
@@ -53,11 +54,20 @@ public class ExampleConfigTests
     }
 
     [Fact]
+    public void ExampleShowsBothConnectionForms()
+    {
+        var connections = BindExample().Databases.Values;
+
+        Assert.Contains(connections, ConnectionStrings.IsUrl);
+        Assert.Contains(connections, c => !ConnectionStrings.IsUrl(c));
+    }
+
+    [Fact]
     public void ExampleDoesNotShipARealLookingPassword()
     {
         foreach (var (name, connectionString) in BindExample().Databases)
         {
-            var password = new NpgsqlConnectionStringBuilder(connectionString).Password;
+            var password = ConnectionStrings.Parse(connectionString).Password;
 
             Assert.True(
                 password is null || password.Contains("YOUR_") || password.Contains("REPLACE"),

@@ -2,7 +2,7 @@
   "context_servers": {
     "postgres": {
       "source": "custom",
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe",
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe",
       "args": [],
       "env": {}
     }

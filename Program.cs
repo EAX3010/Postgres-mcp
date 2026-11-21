@@ -2,9 +2,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Npgsql;
 using PostgresMcpServer.Models;
 using PostgresMcpServer.Services;
+using PostgresMcpServer.Setup;
+using System.Text;
 
 // AppContext.BaseDirectory is the application directory and, unlike Assembly.Location,
 // is still correct for a single-file publish.
@@ -26,18 +27,33 @@ if (args.Contains("--version"))
 if (args.Contains("--init"))
     return RunInit(baseDir, force: args.Contains("--force"));
 
-// Configuration comes from an optional file next to the executable plus POSTGRESMCP_*
-// environment variables, so a deployment can use either, both, or only the environment.
-var configuration = new ConfigurationBuilder()
-    .SetBasePath(baseDir)
-    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-    .AddEnvironmentVariables("POSTGRESMCP_")
-    .Build();
+var (configuration, databaseUrl) = ConfigurationLoader.Load(
+    baseDir, Environment.GetEnvironmentVariable(ConfigurationLoader.DatabaseUrlVariable));
 
 var config = configuration.Get<DatabaseConfig>() ?? new DatabaseConfig();
 
 if (args.Contains("--check") || args.Contains("--doctor"))
-    return await RunDiagnosticsAsync(baseDir, config);
+    return await RunDiagnosticsAsync(baseDir, config, databaseUrl);
+
+// An MCP client always talks to this process through pipes. A console on both ends means a
+// person started it - by double-clicking it, or by typing its name - and waiting silently for
+// JSON-RPC would look like a hang, so that person gets the guided setup instead.
+var startedByAPerson = args.Length == 0 && !Console.IsInputRedirected && !Console.IsOutputRedirected;
+
+if (args.Contains("--setup") || startedByAPerson)
+{
+    var result = await RunSetupAsync(baseDir, config);
+
+    // A double-clicked console window closes the moment the process exits.
+    if (startedByAPerson)
+    {
+        Console.WriteLine();
+        Console.Write("Press Enter to close.");
+        Console.ReadLine();
+    }
+
+    return result;
+}
 
 // Only a total absence of databases is fatal; a single bad entry is reported and skipped.
 if (config.Databases.Count == 0)
@@ -45,19 +61,23 @@ if (config.Databases.Count == 0)
     Console.Error.WriteLine($"""
         [FATAL] No databases are configured.
 
-        Run this to create a starter configuration file:
+        Run the guided setup, which asks for the connection and tests it:
 
-            {ExecutableHint()} --init
+            {ExecutableHint()} --setup
 
-        Then edit {Path.Combine(baseDir, "appsettings.json")} and run --check.
+        Alternatively supply the connection through the environment, with no file:
 
-        Alternatively supply everything through the environment, with no file:
+            DATABASE_URL=postgres://me:password@localhost:5432/mydb
 
-            POSTGRESMCP_Databases__local=Host=localhost;Port=5432;Database=mydb;Username=me;Password=...
-
-        Use __ (double underscore) as the section separator. --help for more.
+        --help lists the other options.
         """);
     return 1;
+}
+
+if (databaseUrl == DatabaseUrlStatus.Ignored)
+{
+    Console.Error.WriteLine(
+        "[CONFIG] DATABASE_URL is set but ignored, because databases are configured explicitly.");
 }
 
 // An empty argument array is passed deliberately: the host's command-line configuration
@@ -92,12 +112,12 @@ await app.RunAsync();
 return 0;
 
 /// <summary>
-/// Writes a minimal appsettings.json next to the executable. A downloaded release contains no
-/// repository, so the binary has to be able to produce its own starting configuration.
+/// Writes a minimal appsettings.json next to the executable, for editing by hand. A downloaded
+/// release contains no repository, so the binary has to produce its own starting configuration.
 /// </summary>
 static int RunInit(string baseDir, bool force)
 {
-    var configPath = Path.Combine(baseDir, "appsettings.json");
+    var configPath = Path.Combine(baseDir, ConfigurationLoader.FileName);
 
     if (File.Exists(configPath) && !force)
     {
@@ -111,7 +131,7 @@ static int RunInit(string baseDir, bool force)
         return 0;
     }
 
-    File.WriteAllText(configPath, StarterConfig());
+    StarterConfiguration.WriteSettings(configPath, StarterConfiguration.Json);
 
     Console.WriteLine($"""
         Created {configPath}
@@ -120,28 +140,65 @@ static int RunInit(string baseDir, bool force)
 
           1. Open that file and replace CHANGE_ME with your PostgreSQL password.
              Adjust Host, Port, Database and Username to match your server.
+             Every option is documented in appsettings.example.json beside it.
 
           2. Verify the connection:
                  {ExecutableHint()} --check
 
-          3. Register the server with your MCP client. The path to give it is:
-                 {Path.Combine(baseDir, ExecutableName())}
+          3. Register the server with your AI client:
+                 {ExecutableHint()} --setup
 
-             Claude Desktop  %APPDATA%\Claude\claude_desktop_config.json (Windows)
-                             ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
-             Claude Code     claude mcp add postgres --scope user "<path above>"
-             Cursor          ~/.cursor/mcp.json
-             VS Code         .vscode/mcp.json          (uses "servers", not "mcpServers")
-             Windsurf        ~/.codeium/windsurf/mcp_config.json
-             Zed             settings.json             (uses "context_servers")
-
-             Ready-to-copy files for each client are in the examples folder beside
-             this executable, and every option is documented in appsettings.example.json.
+             To do that by hand instead, the path to give the client is:
+                 {ExecutablePath(baseDir)}
 
         Full documentation: https://github.com/EAX3010/Postgres-mcp
         """);
 
     return 0;
+}
+
+static async Task<int> RunSetupAsync(string baseDir, DatabaseConfig config)
+{
+    var wizard = new SetupWizard(Console.In, Console.Out, new SetupOptions
+    {
+        BaseDirectory = baseDir,
+        ExecutablePath = ExecutablePath(baseDir),
+        Paths = SetupPaths.Current(),
+        ExistingDatabases = config.Databases,
+        // Piped input has no keys to intercept; the wizard reads a plain line instead.
+        ReadSecret = Console.IsInputRedirected ? null : ReadSecret
+    });
+
+    return await wizard.RunAsync();
+}
+
+/// <summary>Reads a password from the keyboard, showing an asterisk per character.</summary>
+static string? ReadSecret()
+{
+    var secret = new StringBuilder();
+
+    while (true)
+    {
+        var key = Console.ReadKey(intercept: true);
+
+        if (key.Key == ConsoleKey.Enter)
+        {
+            Console.WriteLine();
+            return secret.ToString();
+        }
+
+        if (key.Key == ConsoleKey.Backspace)
+        {
+            if (secret.Length == 0) continue;
+            secret.Length--;
+            Console.Write("\b \b");
+        }
+        else if (!char.IsControl(key.KeyChar))
+        {
+            secret.Append(key.KeyChar);
+            Console.Write('*');
+        }
+    }
 }
 
 static string ExecutableName() =>
@@ -150,13 +207,15 @@ static string ExecutableName() =>
 static string ExecutableHint() =>
     OperatingSystem.IsWindows() ? "PostgresMcpServer.exe" : "./PostgresMcpServer";
 
+static string ExecutablePath(string baseDir) => Path.Combine(baseDir, ExecutableName());
+
 /// <summary>
 /// Validates configuration and actually connects to every database, so setup problems can be
 /// diagnosed from a terminal instead of through an MCP client that reports them as tool errors.
 /// </summary>
-static async Task<int> RunDiagnosticsAsync(string baseDir, DatabaseConfig config)
+static async Task<int> RunDiagnosticsAsync(string baseDir, DatabaseConfig config, DatabaseUrlStatus databaseUrl)
 {
-    var configPath = Path.Combine(baseDir, "appsettings.json");
+    var configPath = Path.Combine(baseDir, ConfigurationLoader.FileName);
 
     Console.WriteLine("PostgresMcpServer configuration check");
     Console.WriteLine(new string('-', 60));
@@ -170,14 +229,20 @@ static async Task<int> RunDiagnosticsAsync(string baseDir, DatabaseConfig config
     Console.WriteLine($"Confirm at risk level : {config.Safety.ConfirmAtRiskLevel}");
     Console.WriteLine($"Multi-statement SQL   : {(config.Safety.AllowMultiStatement ? "ALLOWED (not recommended)" : "refused")}");
     Console.WriteLine($"Max rows / response   : {config.Limits.MaxRows} rows / {config.Limits.MaxResponseBytes:N0} bytes");
+
+    if (databaseUrl == DatabaseUrlStatus.Used)
+        Console.WriteLine($"DATABASE_URL          : used, as the database named '{ConfigurationLoader.DatabaseUrlName}'");
+    else if (databaseUrl == DatabaseUrlStatus.Ignored)
+        Console.WriteLine("DATABASE_URL          : set but ignored - databases are configured explicitly");
+
     Console.WriteLine();
 
     if (config.Databases.Count == 0)
     {
         Console.WriteLine("FAIL  No databases are configured.");
         Console.WriteLine();
-        Console.WriteLine($"Run '{ExecutableHint()} --init' to create a starter configuration file,");
-        Console.WriteLine("or set POSTGRESMCP_Databases__<name> in the environment.");
+        Console.WriteLine($"Run '{ExecutableHint()} --setup' to connect one,");
+        Console.WriteLine("or set DATABASE_URL in the environment.");
         return 1;
     }
 
@@ -188,45 +253,12 @@ static async Task<int> RunDiagnosticsAsync(string baseDir, DatabaseConfig config
 
     foreach (var (name, connectionString) in config.Databases)
     {
-        NpgsqlConnectionStringBuilder parsed;
-        try
-        {
-            parsed = new NpgsqlConnectionStringBuilder(connectionString);
-        }
-        catch (Exception ex)
-        {
-            failures++;
-            Console.WriteLine($"  [FAIL] {name}");
-            Console.WriteLine($"         Connection string does not parse: {ex.Message}");
-            Console.WriteLine();
-            continue;
-        }
+        var probe = await ConnectionProbe.ProbeAsync(connectionString);
+        if (!probe.Success) failures++;
 
-        var target = $"{parsed.Host}:{parsed.Port}/{parsed.Database} as {parsed.Username}";
-
-        try
-        {
-            await using var dataSource = NpgsqlDataSource.Create(connectionString);
-            await using var connection = await dataSource.OpenConnectionAsync();
-            await using var command = new NpgsqlCommand(
-                "SELECT current_database(), current_user, version()", connection);
-            await using var reader = await command.ExecuteReaderAsync();
-            await reader.ReadAsync();
-
-            var serverVersion = reader.GetString(2).Split(" on ")[0];
-
-            Console.WriteLine($"  [ OK ] {name}");
-            Console.WriteLine($"         {target}");
-            Console.WriteLine($"         Connected as {reader.GetString(1)} to {reader.GetString(0)} - {serverVersion}");
-        }
-        catch (Exception ex)
-        {
-            failures++;
-            Console.WriteLine($"  [FAIL] {name}");
-            Console.WriteLine($"         {target}");
-            Console.WriteLine($"         {ex.Message.Split('\n')[0]}");
-        }
-
+        Console.WriteLine($"  {(probe.Success ? "[ OK ]" : "[FAIL]")} {name}");
+        if (probe.Target.Length > 0) Console.WriteLine($"         {probe.Target}");
+        Console.WriteLine($"         {probe.Message}");
         Console.WriteLine();
     }
 
@@ -244,61 +276,32 @@ static string HelpText(string baseDir) => $"""
     PostgresMcpServer - a Model Context Protocol server for PostgreSQL.
 
     USAGE
-      PostgresMcpServer                 Run as an MCP server over stdio (how MCP clients start it)
-      PostgresMcpServer --init          Create a starter appsettings.json next to the executable
-      PostgresMcpServer --init --force  Overwrite an existing appsettings.json
+      PostgresMcpServer --setup         Guided setup: connect a database, register with your AI client
       PostgresMcpServer --check         Validate configuration and connect to every database
+      PostgresMcpServer --init          Create a starter appsettings.json to edit by hand
+      PostgresMcpServer --init --force  Overwrite an existing appsettings.json
       PostgresMcpServer --version       Print the version
       PostgresMcpServer --help          Show this help
+      PostgresMcpServer                 Started by an AI client: run as an MCP server over stdio
+                                        Started from a terminal: the same as --setup
+      PostgresMcpServer --stdio         Run as an MCP server even when started from a terminal
 
     FIRST RUN
-      1. {ExecutableHint()} --init
-      2. Edit appsettings.json and set your password
-      3. {ExecutableHint()} --check
-      4. Register the executable with your MCP client (see the examples folder)
+      {ExecutableHint()} --setup
 
     CONFIGURATION
       Settings are read from an optional file next to the executable:
-          {Path.Combine(baseDir, "appsettings.json")}
+          {Path.Combine(baseDir, ConfigurationLoader.FileName)}
       and from POSTGRESMCP_-prefixed environment variables, which take precedence.
       Either source alone is sufficient; the server needs at least one database.
 
-        POSTGRESMCP_Databases__local=Host=localhost;Port=5432;Database=mydb;Username=me;Password=...
+        POSTGRESMCP_Databases__local=postgres://me:password@localhost:5432/mydb
 
-      Use __ (double underscore) as the section separator.
+      Use __ (double underscore) as the section separator. A connection is either a
+      postgres:// URL or an Npgsql keyword string (Host=...;Database=...).
 
-    NOTE
-      Running this without an MCP client is only useful with --init or --check. Started bare,
-      it waits for JSON-RPC on stdin and writes protocol messages to stdout.
+      When no database is configured either way, DATABASE_URL is used if it is set,
+      under the name '{ConfigurationLoader.DatabaseUrlName}'.
 
-    Docs: docs/README.md
-    """;
-
-/// <summary>
-/// The minimal starting configuration. Deliberately smaller than appsettings.example.json,
-/// which documents every option across several connections and would fail --check repeatedly.
-/// </summary>
-static string StarterConfig() => """
-    {
-      "Databases": {
-        "local": "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=CHANGE_ME"
-      },
-      "Safety": {
-        "RequireConfirmation": true,
-        "EnableDryRun": true,
-        "ConfirmAtRiskLevel": "High",
-        "AllowMultiStatement": false
-      },
-      "Limits": {
-        "CommandTimeoutSeconds": 30,
-        "MaxRows": 1000,
-        "MaxResponseBytes": 1000000
-      },
-      "Audit": {
-        "Enabled": true,
-        "LogPath": "audit.log",
-        "LogToConsole": false
-      }
-    }
-
+    Docs: https://github.com/EAX3010/Postgres-mcp
     """;

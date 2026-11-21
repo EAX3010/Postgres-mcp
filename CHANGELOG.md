@@ -6,6 +6,45 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-21
+
+### Added
+
+- **`--setup`, a guided first run.** It asks for the connection, tests it by connecting, saves
+  it to `appsettings.json`, and registers the server with the AI clients found on the
+  computer — Claude Desktop, Cursor, VS Code, Windsurf, Cline, Gemini CLI and Zed by editing
+  their config file, Claude Code by printing its command. A client file is never rewritten if
+  that would lose comments, an existing server with the same name is not replaced without
+  asking, and the previous version of any file it changes is kept beside it as `.bak`.
+- **Connections can be `postgres://` URLs**, anywhere a connection string is accepted. The
+  libpq parameters `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, `sslpassword`,
+  `channel_binding`, `application_name`, `connect_timeout` and `options` are understood. A URL
+  that fails to parse is reported without quoting it, so a password cannot leak into a log.
+- **`DATABASE_URL`** is used, as a database named `default`, when no database is configured
+  any other way. It never adds to an explicit configuration.
+- `--stdio` runs the server from a terminal, where a bare start now means setup.
+
+### Changed
+
+- **Release archives hold one executable** instead of the executable among some 230 runtime
+  files. Any self-contained publish is now single-file.
+- **Started from a terminal with no arguments — or double-clicked — the program runs the
+  setup** rather than waiting silently for JSON-RPC. MCP clients, which start it through
+  pipes, are unaffected.
+- `--init` and `--setup` write `appsettings.json` readable by its owner only on macOS and
+  Linux.
+- Documentation and examples use the path of an unpacked release rather than of a source
+  build.
+
+### Removed
+
+- `scripts/setup.ps1` and `scripts/setup.sh`. `--setup` does what they did, from the binary
+  itself, so it also works for a downloaded release. From source:
+  `dotnet publish PostgresMcpServer.csproj -c Release -o ./publish` then
+  `./publish/PostgresMcpServer --setup`.
+
+## [1.0.1] - 2026-09-01
+
 ### Security
 
 - **stdout no longer carries log output.** The host installs a console logger targeting

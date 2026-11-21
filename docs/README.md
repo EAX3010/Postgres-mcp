@@ -7,8 +7,8 @@ pick your client from [clients](clients/README.md).
 
 | Page | What it covers |
 |------|----------------|
-| [installation.md](installation.md) | Prerequisites, build, publish, first-run check |
-| [configuration.md](configuration.md) | Every setting, connection string cookbook, environment variables |
+| [installation.md](installation.md) | Download a release, the guided setup, building from source |
+| [configuration.md](configuration.md) | Every setting, connection URLs and strings, environment variables |
 | [clients/](clients/README.md) | Setup for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Gemini CLI, Zed — and why ChatGPT is not supported |
 | [tools.md](tools.md) | All 17 tools, their arguments and what they return |
 | [safety.md](safety.md) | How the guards work and what they do and do not guarantee |
@@ -20,17 +20,16 @@ pick your client from [clients](clients/README.md).
 
 ```bash
 # 1. Download a release for your platform and unpack it.
-#    Self-contained: no .NET runtime required.
+#    One self-contained executable: no .NET runtime required.
 
-# 2. Create the config file
-./PostgresMcpServer --init
-#    edit appsettings.json, replace CHANGE_ME with your password
+# 2. Run the guided setup. It asks for your connection (a postgres:// URL will do),
+#    tests it, saves it, and registers the server with the AI clients it finds.
+./PostgresMcpServer --setup
 
-# 3. Check it works, before involving any AI client
+# 3. Quit your AI client completely and reopen it.
+
+# If anything misbehaves, this connects to every database and prints the real error:
 ./PostgresMcpServer --check
-
-# 4. Register with your client
-#    see docs/clients/
 ```
 
 Windows PowerShell uses `.\PostgresMcpServer.exe` in place of `./PostgresMcpServer` -

@@ -2,24 +2,51 @@
 
 ## Install from a release
 
-The quickest route. Releases ship **self-contained** archives — the .NET runtime is bundled,
-so nothing else needs installing.
+The quickest route. Each release is one **self-contained** executable per platform — the .NET
+runtime is bundled, so nothing else needs installing.
 
 1. Download the archive for your platform from the
    [Releases page](https://github.com/EAX3010/Postgres-mcp/releases) and unpack it.
-2. Open a terminal in that folder and create a configuration file:
+2. Run the guided setup:
 
    ```powershell
-   .\PostgresMcpServer.exe --init     # Windows PowerShell
+   .\PostgresMcpServer.exe --setup     # Windows PowerShell - or just double-click the exe
    ```
 
    ```bash
-   ./PostgresMcpServer --init          # macOS / Linux
+   ./PostgresMcpServer --setup          # macOS / Linux
    ```
 
-3. Edit the `appsettings.json` it created, replacing `CHANGE_ME` with your password.
-4. Confirm it connects, using the same form as above with `--check`.
-5. Register the executable with your client — see [clients/](clients/README.md).
+3. Quit your AI client completely and reopen it, then ask it to *list the databases*.
+
+### What the setup does
+
+1. **Asks for a connection.** Paste a `postgres://` URL, or press Enter and answer host, port,
+   database, username and password one at a time. A typed password is not shown.
+2. **Tests it** by really connecting. If that fails it shows the server's error and lets you
+   retry, save it anyway, or quit. Nothing has been written at this point.
+3. **Saves it** to `appsettings.json` beside the executable, under a name you choose — the
+   name is what you call the database when talking to the assistant. An existing file keeps
+   all its other settings, and the previous version stays beside it as `appsettings.json.bak`.
+4. **Registers the server** with the AI clients it finds on the computer:
+
+   | Client | What happens |
+   |--------|--------------|
+   | Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI, VS Code, Zed | The server is added to the client's config file. Everything else in the file is left as it was, and the previous version is kept beside it with `.bak` added |
+   | Claude Code | The `claude mcp add` command is printed for you to run |
+
+   A config file that contains comments — common in Zed and VS Code — is **not** rewritten,
+   because that would delete them. The block to paste is printed instead, with the real path
+   already in it. If a *different* server called `postgres` is already registered, you are
+   asked before it is replaced.
+
+Run the setup again whenever you like: to add a second database, or to register with a client
+installed later. When the existing connections work, pressing Enter skips straight to the
+clients.
+
+Starting the executable from a terminal with no arguments, or double-clicking it, does the
+same as `--setup`. An AI client starts it through pipes rather than a terminal, which is how
+the two are told apart; `--stdio` forces server mode from a terminal.
 
 ### Running these commands
 
@@ -57,14 +84,14 @@ chmod +x PostgresMcpServer
 
 | | |
 |---|---|
-| `PostgresMcpServer` / `.exe` | The server. Self-contained |
-| `START-HERE.txt` | The five steps above |
-| `appsettings.example.json` | Every setting, documented, with seven example connections |
+| `PostgresMcpServer` / `.exe` | The server: one file, self-contained |
+| `START-HERE.txt` | The one command above |
+| `appsettings.example.json` | Every setting, documented, with example connections |
 | `examples/` | Ready-to-copy client configs for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Gemini CLI and Zed |
 | `docs/` | This documentation |
 | `README.md`, `CHANGELOG.md`, `LICENSE` | |
 
-No `appsettings.json` ships in a release — `--init` writes it, so nobody inherits someone
+No `appsettings.json` ships in a release — the setup writes it, so nobody inherits someone
 else's credentials.
 
 Verify a download against the `SHA256SUMS.txt` published with the release:
@@ -77,62 +104,25 @@ Archives are built for `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx
 
 ---
 
-## Build from source
+## Setting it up by hand
 
-### Prerequisites
+Everything the setup does can be done manually, which suits scripted installs.
 
-| | Needed for |
-|---|---|
-| [.NET 10.0 SDK](https://dotnet.microsoft.com/download) | Building |
-| PostgreSQL server | Everything. Tested against PostgreSQL 16 and 18 |
-| `pg_dump` / `pg_restore` on `PATH` | The `backup` and `restore` tools only |
-| Docker | The integration test suite only |
-
-The published output is **framework-dependent**: whoever runs it needs the .NET 10 runtime.
-See [Self-contained builds](#self-contained-builds) to remove that requirement.
-
-### Build
-
-```bash
-git clone https://github.com/EAX3010/Postgres-mcp.git
-cd Postgres-mcp
-
-dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
-```
-
-> The repository root contains both a `.csproj` and a `.sln`, so bare `dotnet build` cannot
-> choose between them and fails with `MSB1011`. Always name one:
-> `dotnet build PostgresMcpServer.csproj` or `dotnet build "Postgres mcp.sln"`.
-
-There is a setup script that does the build, copies the config template and runs the check:
-
-```powershell
-.\scripts\setup.ps1      # Windows
-```
-
-```bash
-./scripts/setup.sh       # macOS / Linux
-```
-
-### Configure
-
-Let the server write its own starter configuration:
-
-```bash
-./publish/PostgresMcpServer --init
-```
-
-Then edit the `appsettings.json` it created, replacing `CHANGE_ME` with your password. Every
-available setting is documented in `appsettings.example.json` beside it.
-
-The file is optional — the whole configuration can come from `POSTGRESMCP_` environment
-variables instead. The server needs at least one database from one source. See
-[configuration.md](configuration.md).
+1. **Supply a connection**, one of:
+   - `./PostgresMcpServer --init` writes a starter `appsettings.json` beside the executable;
+     edit it and replace `CHANGE_ME`. Every setting is documented in
+     `appsettings.example.json`.
+   - Set `DATABASE_URL`, or `POSTGRESMCP_Databases__<name>`, in the environment and use no
+     file at all. See [configuration.md](configuration.md#environment-variables).
+2. **Check it** — see below.
+3. **Register the executable** with your client — see [clients/](clients/README.md). In every
+   case you supply one absolute path to the executable: no arguments, and no
+   working-directory setting.
 
 ## Check it before involving an AI client
 
 ```bash
-./publish/PostgresMcpServer --check
+./PostgresMcpServer --check
 ```
 
 This validates the configuration and opens a real connection to every database:
@@ -140,9 +130,9 @@ This validates the configuration and opens a real connection to every database:
 ```
 PostgresMcpServer configuration check
 ------------------------------------------------------------
-Application directory : C:\...\publish\
-Config file           : C:\...\publish\appsettings.json
-Audit log             : C:\...\publish\audit.log
+Application directory : C:\Tools\PostgresMcpServer\
+Config file           : C:\Tools\PostgresMcpServer\appsettings.json
+Audit log             : C:\Tools\PostgresMcpServer\audit.log
 Confirm at risk level : High
 Multi-statement SQL   : refused
 Max rows / response   : 1000 rows / 1,000,000 bytes
@@ -160,45 +150,77 @@ It exits `0` when everything connects and `1` otherwise, so it works in a health
 step. Diagnosing setup here is much easier than through a client that reports every problem
 as "server failed to start".
 
-## Register with a client
-
-See [clients/](clients/README.md). In every case you supply one absolute path to the
-executable — no arguments, and no working-directory setting.
-
-## Other commands
+## Commands
 
 ```bash
+PostgresMcpServer --setup     # guided setup: connect a database, register with clients
+PostgresMcpServer --check     # validate config and connect
+PostgresMcpServer --init      # write a starter appsettings.json to edit by hand
 PostgresMcpServer --help      # usage
 PostgresMcpServer --version   # version
-PostgresMcpServer --check     # validate config and connect
-PostgresMcpServer             # run as an MCP server over stdio
+PostgresMcpServer --stdio     # run as an MCP server even when started from a terminal
+PostgresMcpServer             # from an AI client: the MCP server. From a terminal: --setup
 ```
 
-Started with no arguments it waits for JSON-RPC on stdin; that is how clients launch it, and
-it is not useful to run by hand.
+---
 
-## Self-contained builds
+## Build from source
 
-To remove the .NET runtime requirement for end users:
+### Prerequisites
+
+| | Needed for |
+|---|---|
+| [.NET 10.0 SDK](https://dotnet.microsoft.com/download) | Building |
+| PostgreSQL server | Everything. Tested against PostgreSQL 16 and 18 |
+| `pg_dump` / `pg_restore` on `PATH` | The `backup` and `restore` tools only |
+| Docker | The integration test suite only |
+
+### Build
+
+```bash
+git clone https://github.com/EAX3010/Postgres-mcp.git
+cd Postgres-mcp
+
+dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
+./publish/PostgresMcpServer --setup
+```
+
+> The repository root contains both a `.csproj` and a `.sln`, so bare `dotnet build` cannot
+> choose between them and fails with `MSB1011`. Always name one:
+> `dotnet build PostgresMcpServer.csproj` or `dotnet build "Postgres mcp.sln"`.
+
+That output is **framework-dependent**: whoever runs it needs the .NET 10 runtime.
+
+### Self-contained builds
+
+To remove the .NET runtime requirement, name a platform:
 
 ```bash
 dotnet publish PostgresMcpServer.csproj -c Release -r win-x64 --self-contained -o ./publish
 ```
 
-Use `osx-arm64`, `osx-x64` or `linux-x64` as appropriate. The output is larger but runs
-anywhere.
+Use `osx-arm64`, `osx-x64`, `linux-x64` or `linux-arm64` as appropriate. The project file
+turns a self-contained publish into a single executable, which is what the release workflow
+ships.
 
-Ahead-of-time compilation (`PublishAot`) would give a single fast-starting binary, but the
+Ahead-of-time compilation (`PublishAot`) would give a smaller, faster-starting binary, but the
 MCP SDK discovers tools by reflection, so it needs JSON source-generation work first. That is
 not done here.
 
+---
+
 ## Upgrading
+
+**From a release:** quit your AI client, then unpack the new archive over the old folder. The
+archive contains no `appsettings.json`, so yours is left alone. If you unpack somewhere else
+instead, copy `appsettings.json` across and run `--setup` once — it re-points each client at
+the new location.
+
+**From source:**
 
 ```bash
 git pull
 dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
 ```
 
-`publish` does not delete files it no longer produces, and your `appsettings.json` is left
-alone. Restart your MCP client afterwards. Run `--check` to confirm the new build still reads
-your configuration.
+Either way, run `--check` to confirm the new build still reads your configuration.

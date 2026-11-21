@@ -9,8 +9,17 @@
     <RootNamespace>PostgresMcpServer</RootNamespace>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Description>A Model Context Protocol server for PostgreSQL.</Description>
+  </PropertyGroup>
+
+  <!--
+    A self-contained build is what end users download, so it is one executable rather than
+    the executable plus a couple of hundred runtime files to find it among.
+  -->
+  <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <!-- The test projects live under tests/ and must not be compiled into the server. -->

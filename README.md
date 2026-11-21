@@ -12,35 +12,57 @@ Your AI client  ──stdio──▶  PostgresMcpServer  ──▶  PostgreSQL
 
 ## Quick start
 
-**No .NET needed.** Releases ship self-contained binaries with the runtime bundled.
+**No .NET needed.** A release is one self-contained executable.
 
 1. Download the archive for your platform from
    [Releases](https://github.com/EAX3010/Postgres-mcp/releases) and unpack it.
 
-2. Open a terminal **in the folder you unpacked** and run:
+2. Run the setup.
 
-   **Windows (PowerShell)**
+   **Windows** — double-click `PostgresMcpServer.exe`, or in PowerShell:
 
    ```powershell
-   .\PostgresMcpServer.exe --init     # writes appsettings.json next to the exe
-   # now edit appsettings.json and replace CHANGE_ME with your password
-   .\PostgresMcpServer.exe --check    # connects, and tells you what it found
+   .\PostgresMcpServer.exe --setup
    ```
 
    **macOS / Linux**
 
    ```bash
-   ./PostgresMcpServer --init
-   # now edit appsettings.json and replace CHANGE_ME with your password
-   ./PostgresMcpServer --check
+   ./PostgresMcpServer --setup
    ```
 
-   `--check` prints `[ OK ]` per database when it works. If it does not, the error it
-   prints is the real one — see [troubleshooting](docs/troubleshooting.md).
+   It asks for your database — paste a `postgres://` URL, or answer one question at a time —
+   tests the connection, saves it, and registers the server with the AI clients it finds on
+   your computer. Nothing is saved until the connection has been tried.
 
-3. Register the executable with your AI client —
-   **[pick your client here](docs/clients/README.md)**. Ready-to-copy configs for each are in
-   the `examples/` folder inside the archive.
+3. Quit your AI client completely, reopen it, and ask it to *list the databases*.
+
+If something does not work, `PostgresMcpServer --check` connects to every configured database
+and prints the real error — see [troubleshooting](docs/troubleshooting.md).
+
+<details>
+<summary><b>Prefer to paste one block?</b> No setup, no config file</summary>
+
+Give your client the path to the executable and a connection URL:
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe",
+      "env": {
+        "DATABASE_URL": "postgres://user:password@localhost:5432/mydb"
+      }
+    }
+  }
+}
+```
+
+VS Code uses `servers` and Zed uses `context_servers` — see
+[client setup](docs/clients/README.md). Ready-to-copy files for every client are in
+[`examples/`](examples/).
+
+</details>
 
 <details>
 <summary><b>Building from source instead</b> (contributors, or an unlisted platform)</summary>
@@ -52,16 +74,11 @@ git clone https://github.com/EAX3010/Postgres-mcp.git
 cd Postgres-mcp
 
 dotnet publish PostgresMcpServer.csproj -c Release -o ./publish
-./publish/PostgresMcpServer --init
-./publish/PostgresMcpServer --check
+./publish/PostgresMcpServer --setup
 ```
 
-Or run [`scripts/setup.ps1`](scripts/setup.ps1) / [`scripts/setup.sh`](scripts/setup.sh),
-which does all of that and prints the config block for your client with the real path
-already filled in.
-
-Add `-r win-x64 --self-contained` (or `linux-x64`, `osx-arm64`, …) to produce a build that
-does not need the .NET runtime installed.
+Add `-r win-x64 --self-contained` (or `linux-x64`, `osx-arm64`, …) to produce a single
+executable that does not need the .NET runtime installed.
 
 </details>
 
@@ -71,32 +88,14 @@ does not need the .NET runtime installed.
 
 | | |
 |---|---|
-| [Installation](docs/installation.md) | Download a release, or build from source; first-run check |
-| [Configuration](docs/configuration.md) | Every setting, connection string cookbook, environment variables |
+| [Installation](docs/installation.md) | Download a release, or build from source; guided setup |
+| [Configuration](docs/configuration.md) | Every setting, connection URLs and strings, environment variables |
 | [**Client setup**](docs/clients/README.md) | Claude Desktop · Claude Code · Cursor · VS Code · Windsurf · Cline · Gemini CLI · Zed · ChatGPT |
 | [Tools](docs/tools.md) | All 17 tools and their arguments |
 | [Safety model](docs/safety.md) | What the guards do, and what they do not guarantee |
 | [Security](docs/security.md) | Database roles, least privilege, credentials |
 | [Troubleshooting](docs/troubleshooting.md) | Error messages and what to do about them |
 | [Development](docs/development.md) | Layout, tests, contributing |
-
-## Setup in one block
-
-Point your client at the executable. No arguments, no working directory.
-
-```json
-{
-  "mcpServers": {
-    "postgres": {
-      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
-    }
-  }
-}
-```
-
-VS Code uses `servers` and Zed uses `context_servers` — see
-[client setup](docs/clients/README.md). Ready-to-copy files for every client are in
-[`examples/`](examples/).
 
 ## Tools
 
@@ -133,7 +132,7 @@ See [safety](docs/safety.md) and [security](docs/security.md).
 ## Requirements
 
 - **PostgreSQL** - tested against 16 and 18. That is the only hard requirement.
-- Nothing else to run a release: the .NET runtime is bundled in the archive.
+- Nothing else to run a release: the .NET runtime is bundled in the executable.
 - [.NET 10.0 SDK](https://dotnet.microsoft.com/download) - only to build from source.
 - `pg_dump` / `pg_restore` on `PATH` - only for the `backup` and `restore` tools.
 - Docker - only to run the integration tests.

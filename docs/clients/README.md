@@ -15,6 +15,27 @@ paste, how to verify, and the gotcha specific to that client.
 | Zed | `context_servers` | [zed.md](zed.md) | [zed.json](../../examples/zed.json) |
 | ChatGPT / OpenAI | *not supported* | [chatgpt.md](chatgpt.md) | — |
 
+## The quick way
+
+```bash
+./PostgresMcpServer --setup
+```
+
+The setup looks for each client above in its usual place and registers the server with the
+ones you pick. It writes the path correctly escaped, keeps everything else in the file, and
+leaves the previous version beside it with `.bak` added.
+
+It prints the block for you to paste, rather than editing, in three cases:
+
+- **The file contains comments** - common in Zed and VS Code settings. Rewriting would delete
+  them.
+- **Claude Code** - it prints the `claude mcp add` command instead, which is the supported
+  route.
+- **Project-level files** such as `.cursor/mcp.json` or `.vscode/mcp.json`. The setup registers
+  at user level; a per-project registration is yours to add.
+
+Everything below is for doing it by hand.
+
 ## The canonical block
 
 Most clients converged on the same shape. All you supply is the absolute path to the
@@ -25,7 +46,7 @@ own directory.
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
@@ -45,7 +66,7 @@ Every client that accepts an `env` block can supply the database connection dire
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe",
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe",
       "env": {
         "POSTGRESMCP_Databases__local": "Host=localhost;Port=5432;Database=myapp;Username=mcp_readonly;Password=..."
       }
@@ -57,13 +78,16 @@ Every client that accepts an `env` block can supply the database connection dire
 Full example: [`examples/env-only.json`](../../examples/env-only.json). See
 [configuration.md](../configuration.md) for the naming rules.
 
+With a single database, `"DATABASE_URL": "postgres://user:password@host:5432/mydb"` is the
+shorter way to write the same thing - see
+[configuration.md](../configuration.md#database_url).
+
 ## Before you blame the client
 
 Run the server's own diagnostic first. It is far more informative than a client's
 "server failed to start":
 
 ```bash
-./PostgresMcpServer --init     # only if you have no appsettings.json yet
 ./PostgresMcpServer --check
 ```
 
@@ -78,7 +102,7 @@ the client still shows nothing, the problem is the client registration — see
 ## Common mistakes
 
 1. **Single backslashes on Windows.** JSON requires `\\`. This is the single most common
-   cause of a config that silently does nothing.
+   cause of a config that silently does nothing, and the reason `--setup` exists.
 2. **A relative path to the executable.** Clients do not all resolve them the same way. Use
    an absolute path.
 3. **Not restarting the client.** Every one of these reads its config at startup.

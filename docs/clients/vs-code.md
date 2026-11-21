@@ -2,6 +2,10 @@
 
 Copilot agent mode in VS Code can call MCP tools.
 
+> **The quick way:** run `PostgresMcpServer --setup`. It finds VS Code and adds the server to your **user** `mcp.json`. If that file contains
+> comments it is left alone, and the block to paste is printed instead.
+> The rest of this page is for doing it by hand.
+
 ## Where the config lives
 
 - **Workspace** - `.vscode/mcp.json`
@@ -14,7 +18,7 @@ Copilot agent mode in VS Code can call MCP tools.
   "servers": {
     "postgres": {
       "type": "stdio",
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
@@ -23,7 +27,7 @@ Copilot agent mode in VS Code can call MCP tools.
 Ready to copy: [`examples/vs-code.json`](../../examples/vs-code.json)
 
 On macOS and Linux use the extensionless binary path instead:
-`/path/to/Postgres-mcp/publish/PostgresMcpServer`
+`/path/to/PostgresMcpServer/PostgresMcpServer`
 
 ## Verify
 

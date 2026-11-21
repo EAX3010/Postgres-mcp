@@ -39,7 +39,7 @@ public class ConnectionManager : IConnectionManager, IDisposable
         {
             try
             {
-                _dataSources[name] = NpgsqlDataSource.Create(connectionString);
+                _dataSources[name] = NpgsqlDataSource.Create(ConnectionStrings.Normalize(connectionString));
             }
             catch (Exception ex)
             {
@@ -53,7 +53,7 @@ public class ConnectionManager : IConnectionManager, IDisposable
         {
             Console.Error.WriteLine(
                 "[CONFIG-WARNING] No usable database connections were configured. " +
-                "Check the 'Databases' section of appsettings.json.");
+                "Run the server with --check to see why.");
         }
     }
 

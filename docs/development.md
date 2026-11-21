@@ -9,10 +9,17 @@
 │   └── QueryResult.cs
 ├── Services/
 │   ├── AuditLogger.cs               # Append-only JSON log, never throws
+│   ├── ConfigurationLoader.cs       # File + environment, and the DATABASE_URL fallback
 │   ├── ConnectionManager.cs         # One NpgsqlDataSource per configured database
+│   ├── ConnectionProbe.cs           # The real connection attempt behind --check and --setup
+│   ├── ConnectionStrings.cs         # postgres:// URLs translated for Npgsql
 │   ├── PostgresService.cs           # Execution, transactions, catalog introspection
 │   ├── SafetyGuard.cs               # Classification, risk levels, confirmation policy
 │   └── SqlText.cs                   # Comment-aware lexing, quoting, redaction
+├── Setup/                           # The guided first run (--setup)
+│   ├── McpClients.cs                # Where each client keeps its config, and the JSON merge
+│   ├── SetupWizard.cs               # The prompts
+│   └── StarterConfiguration.cs      # What a new appsettings.json starts from
 ├── Tools/                           # MCP tool definitions, one class per group
 │   ├── AdminTools.cs
 │   ├── BackupTools.cs
@@ -25,7 +32,6 @@
 │   └── release.yml                  # Self-contained archives on a version tag
 ├── docs/                            # This documentation
 ├── examples/                        # Ready-to-copy MCP client configs
-├── scripts/                         # setup.ps1, setup.sh
 ├── tests/
 │   ├── PostgresMcpServer.Tests/             # Unit; no database
 │   └── PostgresMcpServer.IntegrationTests/  # Testcontainers; needs Docker
@@ -63,7 +69,13 @@ The server project sets `TreatWarningsAsErrors`, so a warning fails the build.
 
 The build copies `appsettings.example.json`, `examples/` and `LICENSE` alongside the
 executable, so the published output is self-sufficient. `appsettings.json` is never shipped -
-`--init` writes it.
+`--setup` or `--init` writes it.
+
+Adding `-r <rid> --self-contained` produces a single executable; the project file sets
+`PublishSingleFile` for any self-contained publish.
+
+To try the setup without touching your real client configs, answer `N` when it asks which
+clients to register with.
 
 ## Tests
 
@@ -77,7 +89,9 @@ dotnet test "Postgres mcp.sln"
 |------|--------|
 | `SafetyGuardTests.cs` | Statement classification, risk levels, confirmation policy, WHERE detection, the bypasses that once evaded confirmation |
 | `SqlTextTests.cs` | Skeletonising, statement counting, identifier and literal quoting, secret redaction, privilege validation |
-| `ExampleConfigTests.cs` | The shipped example files: every connection string parses, defaults match the docs, client configs are valid and point at the executable |
+| `ExampleConfigTests.cs` | The shipped example files: every connection parses, defaults match the docs, client configs are valid and point at the executable |
+| `ConnectionStringsTests.cs` | `postgres://` URLs: translation, every documented parameter, unencoded password characters, and that errors never quote the URL |
+| `SetupTests.cs` | The setup wizard end to end against a temporary home directory, the client config merge, and the `DATABASE_URL` fallback |
 
 `ExampleConfigTests` links the real `appsettings.example.json` and `examples/*.json` into the
 test project, so an example that drifts from what the code accepts fails the build rather than
@@ -129,17 +143,20 @@ update.
 
 `.github/workflows/ci.yml` builds in Release, runs both suites, and smoke-tests the CLI:
 `--help` and `--version` succeed, `--check` fails cleanly with nothing configured, `--check`
-succeeds against a service-container PostgreSQL, and stdout carries only JSON-RPC. Docker is
-available on GitHub's Ubuntu runners, so the integration tests really run there.
+succeeds against a service-container PostgreSQL both from a keyword string and from a
+`postgres://` URL in `DATABASE_URL`, `--setup` saves a connection that `--check` then accepts,
+and stdout carries only JSON-RPC. Docker is available on GitHub's Ubuntu runners, so the
+integration tests really run there.
 
 ## Releases
 
 `.github/workflows/release.yml` runs on a `v*` tag, or on demand via `workflow_dispatch` if
 you want to exercise the build matrix without publishing. It produces self-contained archives
 for `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`, each containing the
-executable, `START-HERE.txt`, `appsettings.example.json`, `examples/`, `docs/` and the
-licence. The packaged linux build is smoke-tested before upload, and `SHA256SUMS.txt` is
-published with the release.
+single-file executable, `START-HERE.txt`, `appsettings.example.json`, `examples/`, `docs/`
+and the licence. The packaged `linux-x64` build is smoke-tested before upload — the other
+four are built but never run by the workflow — and `SHA256SUMS.txt` is published with the
+release.
 
 Record user-visible changes in [CHANGELOG.md](../CHANGELOG.md) under `[Unreleased]`, then move
 that section under the new version number when you tag.

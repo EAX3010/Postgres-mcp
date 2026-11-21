@@ -3,48 +3,89 @@
 **Start here.** This answers most questions in one step, and it does not need an MCP client:
 
 ```bash
-./publish/PostgresMcpServer --check
+./PostgresMcpServer --check
 ```
 
-On Windows PowerShell: `.\publish\PostgresMcpServer.exe --check`. Every command below is
-written in the macOS and Linux form - see
+On Windows PowerShell: `.\PostgresMcpServer.exe --check`. Every command below is written in
+the macOS and Linux form - see
 [running these commands](installation.md#running-these-commands).
 
 It validates the configuration, prints the effective settings, and opens a real connection to
 every database. If it passes and your client still shows nothing, the problem is the client
-registration, not the server.
+registration, not the server — run `--setup` again and let it register the client.
 
 ---
 
-## Startup
+## Starting the program
 
-### `[FATAL] No databases are configured`
+### Windows shows "Windows protected your PC"
 
-Neither source produced a connection. Create a starter file:
+The release executables are not code-signed, so SmartScreen warns about a download it has not
+seen before. Choose **More info**, then **Run anyway**. Verify the download against
+`SHA256SUMS.txt` first if you want assurance it is the published file.
+
+### macOS says the program cannot be opened or verified
+
+For the same reason, macOS quarantines a file downloaded through a browser. Remove the flag
+once, from the folder you unpacked:
 
 ```bash
-./PostgresMcpServer --init
+xattr -d com.apple.quarantine PostgresMcpServer
 ```
 
-Then edit it and replace `CHANGE_ME`. Alternatively set `POSTGRESMCP_Databases__<name>` in the
-environment and use no file at all. See [configuration.md](configuration.md).
+### `Permission denied` on macOS or Linux
 
-`--check` prints the exact path it looked for.
+The archive tool dropped the executable bit: `chmod +x PostgresMcpServer`.
 
-### `[CONFIG-ERROR] Database 'x' was skipped`
+### `You must install .NET to run this application`
 
-That connection string failed to parse. The other databases still load, and `list_databases`
-reports which were dropped. `--check` shows the parse error.
+Only a build from source says this: its default output is framework-dependent. Install the
+.NET 10 runtime, or produce a self-contained build — see
+[installation.md](installation.md#self-contained-builds). Release downloads bundle the runtime.
 
 ### `MSB1011: Specify which project or solution file to use`
 
 The repository root has both a `.csproj` and a `.sln`. Name one:
 `dotnet build PostgresMcpServer.csproj` or `dotnet test "Postgres mcp.sln"`.
 
-### `You must install .NET to run this application`
+---
 
-The published output is framework-dependent. Install the .NET 10 runtime, or produce a
-self-contained build — see [installation.md](installation.md#self-contained-builds).
+## Configuration
+
+### `[FATAL] No databases are configured`
+
+No source produced a connection. Run the guided setup:
+
+```bash
+./PostgresMcpServer --setup
+```
+
+Alternatively set `DATABASE_URL` or `POSTGRESMCP_Databases__<name>` in the environment and use
+no file at all. See [configuration.md](configuration.md).
+
+`--check` prints the exact path it looked for.
+
+### `[CONFIG-ERROR] Database 'x' was skipped`
+
+That connection failed to parse. The other databases still load, and `list_databases` reports
+which were dropped. `--check` shows the parse error.
+
+### `The connection URL parameter '...' is not one this server understands`
+
+The URL carries a parameter meant for another tool — Prisma's `pgbouncer=true` and
+`connection_limit` are the usual ones. Remove it. The parameters that are understood are
+listed in [configuration.md](configuration.md#connection-urls).
+
+### `The connection URL has a port that is not a number` / `has an '@' after a '?'`
+
+Almost always a password containing `?`, which ends the address early. Write it as `%3F`.
+The message does not show the URL on purpose, so the password stays out of logs.
+
+### `DATABASE_URL is set but ignored`
+
+`DATABASE_URL` is only used when no database is configured any other way — see
+[why](configuration.md#database_url). Remove the entries from `appsettings.json`, or add the
+URL to it under a name of its own.
 
 ---
 
@@ -52,7 +93,8 @@ self-contained build — see [installation.md](installation.md#self-contained-bu
 
 ### `password authentication failed for user "..."`
 
-The password is wrong, or still the `YOUR_PASSWORD` placeholder from the template.
+The password is wrong, or still the `CHANGE_ME` placeholder that `--init` writes. Run
+`--setup` to enter it again; it tests the connection before saving.
 
 ### `No connection could be made because the target machine actively refused it`
 
@@ -72,6 +114,13 @@ line and reload the server.
 The `Database=` part of the connection string names a database that is not there. Connect to
 `postgres` and run `\l` to list them.
 
+### `Cannot load library libgssapi_krb5.so.2` on Linux
+
+Harmless. The database driver looks for Kerberos support before connecting, and a minimal
+Linux install does not have the library. The connection carries on without it, and the notice
+goes to stderr, so it does not disturb an AI client. To silence it, install the library:
+`libgssapi-krb5-2` on Debian and Ubuntu, `krb5-libs` on Fedora and RHEL.
+
 ### Connections hang
 
 Add `Timeout=15` to fail fast instead of waiting, and check for a firewall between you and
@@ -86,11 +135,17 @@ the server.
 1. Run `--check`. If that fails, fix the server first.
 2. **Restart the client fully.** All of them read config at startup. On Windows, Claude
    Desktop keeps running in the tray — quit from the tray icon, not the window.
-3. **Check the backslashes.** On Windows a JSON path needs `\\`. A single-backslash path
-   fails silently. This is the most common cause.
-4. **Use an absolute path** to the executable.
-5. **Check you edited the right file and the right key.** VS Code uses `servers`, Zed uses
-   `context_servers`, everything else uses `mcpServers`. See [clients/](clients/README.md).
+3. **Let `--setup` write the registration.** It puts the right path, correctly escaped, under
+   the right key in the right file. If you moved the folder since registering, it re-points
+   the client.
+
+If you registered by hand, the usual mistakes are:
+
+- **Single backslashes.** On Windows a JSON path needs `\\`. A single-backslash path fails
+  silently.
+- **A relative path** to the executable. Use an absolute one.
+- **The wrong file or key.** VS Code uses `servers`, Zed uses `context_servers`, everything
+  else uses `mcpServers`. See [clients/](clients/README.md).
 
 ### It reports a protocol error
 
@@ -101,7 +156,7 @@ To see for yourself that stdout is clean:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}' \
-  | ./publish/PostgresMcpServer 2>/dev/null
+  | ./PostgresMcpServer 2>/dev/null
 ```
 
 Only JSON should appear.

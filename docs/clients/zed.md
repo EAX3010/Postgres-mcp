@@ -2,6 +2,10 @@
 
 High-performance editor whose assistant supports MCP, which it calls context servers.
 
+> **The quick way:** run `PostgresMcpServer --setup`. It finds Zed, but Zed's `settings.json` usually contains comments, which rewriting
+> would delete - in that case the block to paste is printed with the real path filled in.
+> The rest of this page is for doing it by hand.
+
 ## Where the config lives
 
 Zed's `settings.json`, reachable with the `zed: open settings` command.
@@ -13,7 +17,7 @@ Zed's `settings.json`, reachable with the `zed: open settings` command.
   "context_servers": {
     "postgres": {
       "source": "custom",
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe",
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe",
       "args": [],
       "env": {}
     }
@@ -24,7 +28,7 @@ Zed's `settings.json`, reachable with the `zed: open settings` command.
 Ready to copy: [`examples/zed.json`](../../examples/zed.json)
 
 On macOS and Linux use the extensionless binary path instead:
-`/path/to/Postgres-mcp/publish/PostgresMcpServer`
+`/path/to/PostgresMcpServer/PostgresMcpServer`
 
 ## Verify
 

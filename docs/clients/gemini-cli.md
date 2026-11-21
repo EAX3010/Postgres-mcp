@@ -2,6 +2,9 @@
 
 Google's terminal agent, which supports MCP servers.
 
+> **The quick way:** run `PostgresMcpServer --setup`. It finds Gemini CLI and adds the server to the file below for you.
+> The rest of this page is for doing it by hand.
+
 ## Where the config lives
 
 `~/.gemini/settings.json`
@@ -12,7 +15,7 @@ Google's terminal agent, which supports MCP servers.
 {
   "mcpServers": {
     "postgres": {
-      "command": "C:\\path\\to\\Postgres-mcp\\publish\\PostgresMcpServer.exe"
+      "command": "C:\\path\\to\\PostgresMcpServer\\PostgresMcpServer.exe"
     }
   }
 }
@@ -21,7 +24,7 @@ Google's terminal agent, which supports MCP servers.
 Ready to copy: [`examples/gemini-cli.json`](../../examples/gemini-cli.json)
 
 On macOS and Linux use the extensionless binary path instead:
-`/path/to/Postgres-mcp/publish/PostgresMcpServer`
+`/path/to/PostgresMcpServer/PostgresMcpServer`
 
 ## Verify
 

@@ -51,7 +51,8 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building $VERSION for ${{ matrix.rid }}"
 
-      # Self-contained so the archive runs without the .NET runtime installed.
+      # Self-contained so the archive runs without the .NET runtime installed. The project
+      # file turns a self-contained publish into a single executable.
       - name: Publish
         run: |
           dotnet publish PostgresMcpServer.csproj \
@@ -83,17 +84,21 @@ jobs:
           This build is self-contained. You do NOT need the .NET runtime installed.
 
           SETUP
-            1. $EXE --init
-                 Creates appsettings.json next to this file.
+            Run:  $EXE --setup
 
-            2. Edit appsettings.json and replace CHANGE_ME with your password.
+            On Windows you can double-click PostgresMcpServer.exe instead.
 
-            3. $EXE --check
-                 Connects to every configured database and reports what it finds.
+            It asks for your database connection (paste a postgres:// URL, or
+            answer one question at a time), tests it, saves it, and registers
+            the server with the AI clients it finds on this computer.
 
-            4. Register this executable with your MCP client.
-               Ready-to-copy configuration for each client is in examples/
-               Step-by-step instructions are in docs/clients/
+            Then quit your AI client completely and reopen it.
+
+          DOING IT BY HAND INSTEAD
+            1. $EXE --init       creates appsettings.json to edit
+            2. $EXE --check      connects to every configured database
+            3. Add this executable to your client's MCP configuration.
+               Ready-to-copy files are in examples/, instructions in docs/clients/
 
           WHAT IS IN THIS ARCHIVE
             $EXE                     the server
@@ -106,8 +111,8 @@ jobs:
 
           NOTES
             Run "$EXE --help" for all commands.
-            Started with no arguments this waits for JSON-RPC on stdin; that is how
-            MCP clients launch it, and it is not useful to run by hand.
+            AI clients start this program themselves, with no arguments, and talk
+            to it over stdin and stdout.
 
           Before pointing this at a production database, read docs/security.md.
           Connect as a least-privilege role, not as postgres.
@@ -119,6 +124,10 @@ jobs:
         run: |
           cd staging/PostgresMcpServer
           chmod +x PostgresMcpServer
+          # One executable, not a folder of runtime libraries to find it among.
+          if ls ./*.dll >/dev/null 2>&1; then
+            echo "Expected a single-file build, found loose libraries:"; ls ./*.dll; exit 1
+          fi
           ./PostgresMcpServer --version
           ./PostgresMcpServer --help
           ./PostgresMcpServer --init
@@ -127,6 +136,11 @@ jobs:
             echo "--check should fail against the placeholder password"; exit 1
           fi
           rm appsettings.json
+          # The guided setup must stop without saving when the connection cannot be made.
+          if printf '%s\n' 'postgres://nobody:nothing@127.0.0.1:1/none' 'q' | ./PostgresMcpServer --setup; then
+            echo "--setup should fail when the user quits after a failed connection"; exit 1
+          fi
+          test ! -f appsettings.json || { echo "--setup saved a connection that was abandoned"; exit 1; }
           echo "Packaged build behaves correctly"
 
       - name: Create archive
@@ -179,20 +193,20 @@ jobs:
             ## Install
 
             1. Download the archive for your platform below and unpack it.
-            2. Run `PostgresMcpServer --init` to create `appsettings.json`.
-            3. Edit it, replacing `CHANGE_ME` with your PostgreSQL password.
-            4. Run `PostgresMcpServer --check` to confirm it connects.
-            5. Register the executable with your MCP client — see [docs/clients](docs/clients/README.md).
+            2. Run `PostgresMcpServer --setup` (on Windows, double-clicking the exe does the same).
+               It asks for your connection, tests it, and registers the server with the AI
+               clients it finds.
+            3. Quit your AI client completely and reopen it.
 
-            Every build is **self-contained**: the .NET runtime is bundled, so nothing else
-            needs installing.
+            Every build is a **single self-contained executable**: the .NET runtime is
+            bundled, so nothing else needs installing.
 
             ## What is in each archive
 
             | | |
             |---|---|
             | `PostgresMcpServer` | The server |
-            | `START-HERE.txt` | Setup in five lines |
+            | `START-HERE.txt` | Setup in one command |
             | `appsettings.example.json` | Every setting, documented |
             | `examples/` | Client configs for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Gemini CLI and Zed |
             | `docs/` | Full documentation |
